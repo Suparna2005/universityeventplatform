@@ -1,0 +1,95 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.models.event import Event, EventState, Registration, RegistrationStatus
+from app.schemas.events import EventCreate
+from app.models.user import User, RoleEnum
+from app.api.dependencies import get_current_user
+
+router = APIRouter(prefix="/api/events", tags=["events"])
+
+@router.get("")
+def list_events(db: Session = Depends(get_db)):
+    # Return all published events
+    events = db.query(Event).filter(Event.state == EventState.published).all()
+    
+    # We serialize manually for now before adding Pydantic schemas
+    return [{
+        "id": e.id,
+        "title": e.title,
+        "description": e.description,
+        "date": e.date,
+        "location": e.location,
+        "capacity": e.capacity,
+        # Budget is explicitly hidden from the public/student event list
+        "registered_count": db.query(Registration).filter(
+            Registration.event_id == e.id,
+            Registration.status != RegistrationStatus.cancelled
+        ).count(),
+        "state": e.state.value,
+    } for e in events]
+
+@router.post("")
+def create_event(
+    event: EventCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
+        raise HTTPException(status_code=403, detail="Not authorized to create events")
+    
+    new_event = Event(
+        title=event.title,
+        description=event.description,
+        date=event.date,
+        location=event.location,
+        capacity=event.capacity,
+        budget=event.budget,
+        club_id=event.club_id,
+        state=EventState.faculty_review  # Requires mentor approval before being published
+    )
+    db.add(new_event)
+    db.commit()
+    db.refresh(new_event)
+    return {"message": "Event created successfully", "id": new_event.id}
+
+@router.delete("/{event_id}")
+def delete_event(
+    event_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.mentor]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete events")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    from app.models.finance import Budget, Expense, Feedback
+    from app.models.engagement import Ticket, Attendance, Certificate, ParticipationLedger
+    
+    # 1. Delete certificates and ledger
+    db.query(Certificate).filter(Certificate.event_id == event_id).delete(synchronize_session=False)
+    db.query(ParticipationLedger).filter(ParticipationLedger.event_id == event_id).delete(synchronize_session=False)
+    
+    # 2. Delete feedback
+    db.query(Feedback).filter(Feedback.event_id == event_id).delete(synchronize_session=False)
+    
+    # 3. Delete budgets and expenses
+    budgets = db.query(Budget).filter(Budget.event_id == event_id).all()
+    for b in budgets:
+        db.query(Expense).filter(Expense.budget_id == b.id).delete(synchronize_session=False)
+        db.delete(b)
+        
+    # 4. Delete registrations and related tickets/attendance
+    registrations = db.query(Registration).filter(Registration.event_id == event_id).all()
+    for reg in registrations:
+        db.query(Attendance).filter(Attendance.registration_id == reg.id).delete(synchronize_session=False)
+        db.query(Ticket).filter(Ticket.registration_id == reg.id).delete(synchronize_session=False)
+        db.delete(reg)
+        
+    # 5. Finally, delete the event
+    db.delete(event)
+    db.commit()
+    return {"message": "Event and all related data deleted successfully"}
