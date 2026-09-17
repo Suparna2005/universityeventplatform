@@ -12,13 +12,27 @@ router = APIRouter(prefix="/api/attendance", tags=["attendance"])
 class ScanRequest(BaseModel):
     secure_token: str
 
+import jwt
+from app.core.security import SECRET_KEY, ALGORITHM
+
 @router.post("/check-in")
 def check_in(request: ScanRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # Only coordinators, mentors, or admins can scan tickets
     if current_user.role not in [RoleEnum.coordinator, RoleEnum.mentor, RoleEnum.admin]:
         raise HTTPException(status_code=403, detail="Unauthorized to scan tickets")
 
-    ticket = db.query(Ticket).filter(Ticket.secure_token == request.secure_token).first()
+    # Decode Live QR JWT or fallback to static token
+    actual_secure_token = request.secure_token
+    try:
+        payload = jwt.decode(request.secure_token, SECRET_KEY, algorithms=[ALGORITHM])
+        actual_secure_token = payload.get("sub")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Expired QR code. Please ask the student to refresh their ticket.")
+    except jwt.PyJWTError:
+        # Fallback to normal static token (for backward compatibility)
+        pass
+
+    ticket = db.query(Ticket).filter(Ticket.secure_token == actual_secure_token).first()
     if not ticket:
         raise HTTPException(status_code=400, detail="Invalid QR code token")
 

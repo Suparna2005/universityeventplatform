@@ -78,11 +78,27 @@ def approve_event(event_id: int, current_user: User = Depends(get_current_user),
         raise HTTPException(status_code=404, detail="Event not found")
         
     if event.state != EventState.faculty_review and event.state != EventState.submitted:
-        raise HTTPException(status_code=400, detail="Event is not pending approval")
+        raise HTTPException(status_code=400, detail="Event is not pending mentor approval")
         
     event.state = EventState.published
     db.commit()
     return {"message": "Event approved and published successfully"}
+
+@router.put("/events/{event_id}/approve-budget")
+def approve_event_budget(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
+        raise HTTPException(status_code=403, detail="Only finance officers can approve budgets")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    if event.state != EventState.finance_review:
+        raise HTTPException(status_code=400, detail="Event is not pending budget review")
+        
+    event.state = EventState.faculty_review
+    db.commit()
+    return {"message": "Budget approved successfully! Event sent to Mentor."}
 
 @router.get("/events/{event_id}/export")
 def export_registrations(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

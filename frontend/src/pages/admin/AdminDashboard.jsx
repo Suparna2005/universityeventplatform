@@ -86,6 +86,16 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleApproveBudget = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-budget`);
+      alert("Budget approved successfully!");
+      fetchAdminData();
+    } catch (err) {
+      alert(`Error: ${err.response?.data?.detail || 'Failed to approve budget'}`);
+    }
+  };
+
   const handleExportRegistrations = (eventId) => {
     window.open(`${baseURL}/api/admin/events/${eventId}/export`, '_blank');
   };
@@ -254,10 +264,16 @@ const AdminDashboard = () => {
                 {['admin', 'finance', 'coordinator'].includes(user.role) && (
                   <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                     <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#047857' }}>💰 Financial Status</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '1rem' }}>
                       <span>Allocated Budget: ₹{(event.budget || 0).toLocaleString()}</span>
                       <span>Est. Expenses: ₹{(event.registered_count * 200).toLocaleString()}</span>
                     </div>
+                    {/* FINANCE APPROVAL UI */}
+                    {['finance', 'admin'].includes(user.role) && event.state === 'finance_review' && (
+                      <button onClick={() => handleApproveBudget(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none' }}>
+                        💰 Approve Budget for Mentor
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -282,28 +298,24 @@ const AdminDashboard = () => {
                   {['mentor', 'admin'].includes(user.role) && (
                     <>
                       {/* Mentor Approval */}
-                      {!['published', 'completed', 'cancelled'].includes(event.state) && (
+                      {event.state === 'faculty_review' && (
                         <button onClick={() => handleApproveEvent(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
                           ✅ Approve Program
                         </button>
                       )}
                       
                       {/* Mentor Certificate Generation */}
-                      {event.attendance_file_url ? (
+                      {event.state === 'completed' && (
                         <div style={{ marginTop: '0.5rem' }}>
-                          <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', marginBottom: '0.5rem', textDecoration: 'none' }}>
-                            📥 Review Uploaded Attendance
-                          </a>
+                          {event.attendance_file_url && (
+                            <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', marginBottom: '0.5rem', textDecoration: 'none' }}>
+                              📥 Review Uploaded Attendance
+                            </a>
+                          )}
                           <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
                             🎓 Mass-Generate Certificates
                           </button>
                         </div>
-                      ) : (
-                         event.state === 'completed' && (
-                           <button disabled className="btn-secondary" style={{ width: '100%', opacity: 0.5, cursor: 'not-allowed' }}>
-                             Waiting for Coordinator Attendance File
-                           </button>
-                         )
                       )}
                     </>
                   )}
@@ -318,10 +330,16 @@ const AdminDashboard = () => {
                         📥 Export Registrations (CSV)
                       </button>
                       
-                      <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.5rem', borderRadius: '4px' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.5rem' }}>
                         <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>📤 Upload Attendance to Mentor:</label>
                         <input type="file" accept=".csv, .xlsx" onChange={(e) => handleUploadAttendance(event.id, e.target.files[0])} style={{ fontSize: '0.8rem', width: '100%' }} />
                       </div>
+                      
+                      {event.state === 'completed' && (
+                        <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
+                          🎓 Mass-Generate Certificates
+                        </button>
+                      )}
                     </>
                   ) : (
                     <button disabled className="btn-secondary" style={{ width: '100%', opacity: 0.7, cursor: 'not-allowed', display: ['admin', 'coordinator', 'mentor'].includes(user.role) ? 'none' : 'block' }}>

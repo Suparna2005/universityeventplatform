@@ -61,15 +61,31 @@ const Dashboard = () => {
 
   const handleViewQR = async (registrationId) => {
     try {
-      const response = await axios.get(`${baseURL}/api/tickets/${registrationId}/qr`, {
+      const response = await axios.get(`${baseURL}/api/tickets/${registrationId}/qr/live`, {
         responseType: 'blob'
       });
       const imageUrl = URL.createObjectURL(response.data);
-      setQrModal({ isOpen: true, imageUrl });
+      setQrModal({ isOpen: true, imageUrl, regId: registrationId });
     } catch (err) {
       alert(`Error: ${err.response?.data?.detail || 'Failed to load QR code'}`);
     }
   };
+
+  useEffect(() => {
+    let interval;
+    if (qrModal.isOpen && qrModal.regId) {
+      interval = setInterval(async () => {
+        try {
+          const response = await axios.get(`${baseURL}/api/tickets/${qrModal.regId}/qr/live`, { responseType: 'blob' });
+          const imageUrl = URL.createObjectURL(response.data);
+          setQrModal(prev => ({ ...prev, imageUrl }));
+        } catch (err) {
+          console.error("Failed to refresh QR", err);
+        }
+      }, 5000); // refresh every 5 seconds
+    }
+    return () => clearInterval(interval);
+  }, [qrModal.isOpen, qrModal.regId, baseURL]);
 
   const submitFeedback = async (e) => {
     e.preventDefault();

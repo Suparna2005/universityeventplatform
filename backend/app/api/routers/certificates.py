@@ -12,8 +12,8 @@ router = APIRouter(prefix="/api/certificates", tags=["certificates"])
 
 @router.post("/events/{event_id}/generate")
 def bulk_generate_certificates(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.mentor, RoleEnum.admin]:
-        raise HTTPException(status_code=403, detail="Only Mentors can generate certificates")
+    if current_user.role not in [RoleEnum.mentor, RoleEnum.admin, RoleEnum.coordinator]:
+        raise HTTPException(status_code=403, detail="Unauthorized to generate certificates")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if event.state != EventState.completed:

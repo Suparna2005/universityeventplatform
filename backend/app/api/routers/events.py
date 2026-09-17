@@ -37,6 +37,10 @@ def create_event(
 ):
     if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
         raise HTTPException(status_code=403, detail="Not authorized to create events")
+        
+    from datetime import datetime
+    if event.date.replace(tzinfo=None) < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Cannot schedule an event in the past")
     
     new_event = Event(
         title=event.title,
@@ -46,7 +50,7 @@ def create_event(
         capacity=event.capacity,
         budget=event.budget,
         club_id=event.club_id,
-        state=EventState.faculty_review  # Requires mentor approval before being published
+        state=EventState.finance_review  # Requires finance approval first
     )
     db.add(new_event)
     db.commit()

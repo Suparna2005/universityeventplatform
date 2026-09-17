@@ -41,9 +41,10 @@ def register_for_event(event_id: int, current_user: User = Depends(get_current_u
     ).count()
 
     # Determine status based on capacity
-    reg_status = RegistrationStatus.registered
     if current_count >= event.capacity:
-        reg_status = RegistrationStatus.waitlisted # Simple waitlist logic
+        raise HTTPException(status_code=400, detail="Event is at maximum capacity")
+        
+    reg_status = RegistrationStatus.registered
 
     registration = Registration(
         student_id=student_id,
