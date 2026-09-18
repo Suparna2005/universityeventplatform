@@ -15,68 +15,67 @@ import app.models
 from fastapi.staticfiles import StaticFiles
 import os
 
-UPLOAD_DIR = "uploads/profiles"
-ATTENDANCE_DIR = "uploads/attendance"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(ATTENDANCE_DIR, exist_ok=True)
+is_vercel = bool(os.getenv("VERCEL"))
+UPLOAD_DIR = "/tmp/uploads/profiles" if is_vercel else "uploads/profiles"
+ATTENDANCE_DIR = "/tmp/uploads/attendance" if is_vercel else "uploads/attendance"
+try:
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    os.makedirs(ATTENDANCE_DIR, exist_ok=True)
+except Exception:
+    pass
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Setup actions
-    import sqlite3
-    import os
-    from app.core.config import settings
-    
-    # Auto-patch the database to add new columns if they are missing
+    # Auto-patch SQLite database if running locally on SQLite
     if settings.DATABASE_URL.startswith("sqlite:///"):
+        import sqlite3
         db_path = settings.DATABASE_URL.replace("sqlite:///", "")
         if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            
-            # Patch events
-            try: conn.execute("ALTER TABLE events ADD COLUMN budget INTEGER NOT NULL DEFAULT 0")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE events ADD COLUMN attendance_file_url TEXT")
-            except sqlite3.OperationalError: pass
-            
-            # Patch users
-            try: conn.execute("ALTER TABLE users ADD COLUMN profile_picture TEXT")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE users ADD COLUMN bio TEXT")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE users ADD COLUMN phone_number TEXT")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE users ADD COLUMN department TEXT")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE users ADD COLUMN gender TEXT")
-            except sqlite3.OperationalError: pass
-            
-            # Patch budgets (if table exists)
-            try: conn.execute("ALTER TABLE budgets ADD COLUMN proposed_amount REAL")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE budgets ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE budgets ADD COLUMN proposed_by_id INTEGER")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE budgets ADD COLUMN approved_by_id INTEGER")
-            except sqlite3.OperationalError: pass
-            
-            # Patch new workflow columns
-            try: conn.execute("ALTER TABLE events ADD COLUMN end_date DATETIME")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE registrations ADD COLUMN rank TEXT")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE certificates ADD COLUMN rank TEXT DEFAULT 'Participation'")
-            except sqlite3.OperationalError: pass
-            try: conn.execute("ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0")
-            except sqlite3.OperationalError: pass
+            try:
+                conn = sqlite3.connect(db_path)
+                try: conn.execute("ALTER TABLE events ADD COLUMN budget INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN attendance_file_url TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE users ADD COLUMN profile_picture TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE users ADD COLUMN bio TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE users ADD COLUMN phone_number TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE users ADD COLUMN department TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE users ADD COLUMN gender TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE budgets ADD COLUMN proposed_amount REAL")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE budgets ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE budgets ADD COLUMN proposed_by_id INTEGER")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE budgets ADD COLUMN approved_by_id INTEGER")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN end_date DATETIME")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE registrations ADD COLUMN rank TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE certificates ADD COLUMN rank TEXT DEFAULT 'Participation'")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0")
+                except sqlite3.OperationalError: pass
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                print(f"SQLite patch skipped: {e}")
 
-            conn.commit()
-            conn.close()
-                
-    # Automatically create tables for the Day 2/3 requirements
-    Base.metadata.create_all(bind=engine)
+    # Automatically create tables for PostgreSQL / Supabase or SQLite
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Table creation warning: {e}")
+        
     yield
+
     # Teardown actions
 
 app = FastAPI(

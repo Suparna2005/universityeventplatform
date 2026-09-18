@@ -13,18 +13,22 @@ if database_url.startswith("sqlite:///"):
     if dir_name:
         os.makedirs(dir_name, exist_ok=True)
 
-# Important: check_same_thread=False is needed for SQLite in FastAPI
 engine_args = {}
 if database_url.startswith("sqlite"):
     engine_args["check_same_thread"] = False
-    
-if ":memory:" in database_url:
-    engine_args["poolclass"] = StaticPool
-
-if engine_args:
+    if ":memory:" in database_url:
+        engine_args["poolclass"] = StaticPool
     engine = create_engine(database_url, connect_args=engine_args)
 else:
-    engine = create_engine(database_url)
+    # PostgreSQL / Supabase connection pooling configuration for serverless compatibility
+    engine = create_engine(
+        database_url,
+        pool_pre_ping=True,  # Automatically check & reconnect dead connections
+        pool_size=5,         # Suitable for serverless functions
+        max_overflow=10,
+        pool_recycle=300     # Recycle connections every 5 minutes
+    )
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
