@@ -30,7 +30,12 @@ class Certificate(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     certificate_number = Column(String, unique=True, index=True, nullable=False)
+    rank = Column(String, default="Participation")
+    is_published = Column(Integer, default=0) # SQLite boolean
     issued_at = Column(DateTime, default=datetime.utcnow)
+
+    student = relationship("Student")
+    event = relationship("Event")
 
 class ParticipationLedger(Base):
     __tablename__ = "participation_ledger"

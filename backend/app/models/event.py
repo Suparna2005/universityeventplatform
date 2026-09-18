@@ -13,6 +13,7 @@ class EventState(str, enum.Enum):
     published = "published"
     registration_closed = "registration_closed"
     in_progress = "in_progress"
+    pending_completion = "pending_completion"
     completed = "completed"
     cancelled = "cancelled"
 
@@ -23,6 +24,7 @@ class Event(Base):
     title = Column(String, index=True, nullable=False)
     description = Column(Text, nullable=False)
     date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)
     location = Column(String, nullable=False)
     capacity = Column(Integer, nullable=False)
     budget = Column(Integer, default=0, nullable=False)
@@ -46,6 +48,7 @@ class Registration(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
     status = Column(Enum(RegistrationStatus), default=RegistrationStatus.registered)
+    rank = Column(String, nullable=True) # 1st, 2nd, 3rd, or Participation
     registered_at = Column(DateTime, default=datetime.utcnow)
 
     student = relationship("Student", back_populates="registrations")

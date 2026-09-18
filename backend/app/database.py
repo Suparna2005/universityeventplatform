@@ -14,14 +14,17 @@ if database_url.startswith("sqlite:///"):
         os.makedirs(dir_name, exist_ok=True)
 
 # Important: check_same_thread=False is needed for SQLite in FastAPI
-# StaticPool is used to maintain a single connection for in-memory DB if used during tests
-engine_args = {"check_same_thread": False}
+engine_args = {}
+if database_url.startswith("sqlite"):
+    engine_args["check_same_thread"] = False
+    
 if ":memory:" in database_url:
     engine_args["poolclass"] = StaticPool
 
-engine = create_engine(
-    database_url, connect_args=engine_args
-)
+if engine_args:
+    engine = create_engine(database_url, connect_args=engine_args)
+else:
+    engine = create_engine(database_url)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

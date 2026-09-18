@@ -12,22 +12,23 @@ router = APIRouter(prefix="/api/certificates", tags=["certificates"])
 
 @router.post("/events/{event_id}/generate")
 def bulk_generate_certificates(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.mentor, RoleEnum.admin, RoleEnum.coordinator]:
-        raise HTTPException(status_code=403, detail="Unauthorized to generate certificates")
+    if current_user.role not in [RoleEnum.mentor, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Only mentors can generate certificates")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if event.state != EventState.completed:
-        # For testing, we might want to bypass this, but let's stick to the rules
-        pass # In a real app we'd block this, but we'll allow it for the demo
+        raise HTTPException(status_code=400, detail="Event must be completed to generate certificates")
 
-    # Find all students who checked in (have attendance)
-    attendances = db.query(Attendance).join(Attendance.registration).filter(
-        Attendance.registration.has(event_id=event_id)
+    # Find all students who checked in (have attendance) OR have a rank from the CSV
+    from app.models.event import Registration
+    registrations = db.query(Registration).filter(
+        Registration.event_id == event_id,
+        (Registration.rank != None) | (Registration.id.in_(db.query(Attendance.registration_id)))
     ).all()
 
     generated_count = 0
-    for att in attendances:
-        student_id = att.registration.student_id
+    for reg in registrations:
+        student_id = reg.student_id
         # Prevent duplicate certificates
         existing = db.query(Certificate).filter(
             Certificate.event_id == event_id,
@@ -38,22 +39,45 @@ def bulk_generate_certificates(event_id: int, current_user: User = Depends(get_c
             cert = Certificate(
                 student_id=student_id,
                 event_id=event_id,
-                certificate_number=f"CERT-{uuid.uuid4().hex[:8].upper()}"
+                certificate_number=f"CERT-{uuid.uuid4().hex[:8].upper()}",
+                rank=reg.rank or "Participation",
+                is_published=0
             )
             db.add(cert)
             
-            # Also give them participation hours (e.g., 2 hours per event)
-            ledger = ParticipationLedger(
-                student_id=student_id,
-                event_id=event_id,
-                hours_earned=2.0,
-                reason=f"Attended {event.title}"
-            )
-            db.add(ledger)
+            # Also give them participation hours
+            ledger = db.query(ParticipationLedger).filter(
+                ParticipationLedger.event_id == event_id,
+                ParticipationLedger.student_id == student_id
+            ).first()
+            
+            if not ledger:
+                ledger = ParticipationLedger(
+                    student_id=student_id,
+                    event_id=event_id,
+                    hours_earned=2.0,
+                    reason=f"Attended {event.title}"
+                )
+                db.add(ledger)
             generated_count += 1
             
     db.commit()
-    return {"message": f"Successfully generated {generated_count} certificates."}
+    return {"message": f"Successfully generated {generated_count} certificates. Ready for coordinator to publish."}
+
+@router.put("/events/{event_id}/publish")
+def publish_certificates(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Only coordinators can publish certificates")
+        
+    certs = db.query(Certificate).filter(Certificate.event_id == event_id).all()
+    count = 0
+    for cert in certs:
+        if cert.is_published == 0:
+            cert.is_published = 1
+            count += 1
+            
+    db.commit()
+    return {"message": f"Successfully published {count} certificates to students!"}
 
 @router.get("/{certificate_id}/download")
 def download_certificate(certificate_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -71,7 +95,8 @@ def download_certificate(certificate_id: int, current_user: User = Depends(get_c
         student_name=student.name,
         event_title=event.title,
         date_str=event.date.strftime("%B %d, %Y"),
-        cert_number=cert.certificate_number
+        cert_number=cert.certificate_number,
+        rank=cert.rank
     )
     
     return Response(
@@ -85,13 +110,17 @@ def get_my_certificates(current_user: User = Depends(get_current_user), db: Sess
     if current_user.role != RoleEnum.student or not current_user.student_profile:
         return []
         
-    certs = db.query(Certificate).filter(Certificate.student_id == current_user.student_profile.id).all()
+    certs = db.query(Certificate).filter(
+        Certificate.student_id == current_user.student_profile.id,
+        Certificate.is_published == 1
+    ).all()
     
     return [
         {
             "id": c.id,
             "event_title": c.event.title,
             "certificate_number": c.certificate_number,
+            "rank": c.rank,
             "issued_at": c.issued_at
         } for c in certs
     ]

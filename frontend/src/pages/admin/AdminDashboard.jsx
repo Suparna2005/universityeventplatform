@@ -14,7 +14,7 @@ const AdminDashboard = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [scanningEventId, setScanningEventId] = useState(null);
   const [newEvent, setNewEvent] = useState({
-    title: '', description: '', date: '', location: '', capacity: '', budget: ''
+    title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: ''
   });
 
   const { user, logout } = useContext(AuthContext);
@@ -52,13 +52,14 @@ const AdminDashboard = () => {
         title: newEvent.title,
         description: newEvent.description,
         date: new Date(newEvent.date).toISOString(),
+        end_date: newEvent.end_date ? new Date(newEvent.end_date).toISOString() : null,
         location: newEvent.location,
         capacity: parseInt(newEvent.capacity),
         budget: parseInt(newEvent.budget) || 0
       });
       alert('Event scheduled successfully!');
       setShowCreateForm(false);
-      setNewEvent({ title: '', description: '', date: '', location: '', capacity: '', budget: '' });
+      setNewEvent({ title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '' });
       fetchAdminData();
     } catch (err) {
       alert(`Error: ${err.response?.data?.detail || 'Failed to create event'}`);
@@ -93,6 +94,35 @@ const AdminDashboard = () => {
       fetchAdminData();
     } catch (err) {
       alert(`Error: ${err.response?.data?.detail || 'Failed to approve budget'}`);
+    }
+  };
+
+  const handleCloseEvent = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/close`);
+      alert("Event closed successfully! Sent to mentor for completion approval.");
+      fetchAdminData();
+    } catch (err) {
+      alert(`Error: ${err.response?.data?.detail || 'Failed to close event'}`);
+    }
+  };
+
+  const handleApproveCompletion = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-completion`);
+      alert("Event completion approved successfully!");
+      fetchAdminData();
+    } catch (err) {
+      alert(`Error: ${err.response?.data?.detail || 'Failed to approve event completion'}`);
+    }
+  };
+
+  const handlePublishCertificates = async (eventId) => {
+    try {
+      const response = await axios.put(`${baseURL}/api/certificates/events/${eventId}/publish`);
+      alert(response.data.message);
+    } catch (err) {
+      alert(`Error: ${err.response?.data?.detail || 'Failed to publish certificates'}`);
     }
   };
 
@@ -213,8 +243,12 @@ const AdminDashboard = () => {
                 <textarea className="input-glass" rows="3" required value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})}></textarea>
               </div>
               <div>
-                <label>Date & Time</label>
+                <label>Start Date & Time</label>
                 <input type="datetime-local" className="input-glass" required value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} />
+              </div>
+              <div>
+                <label>End Date & Time</label>
+                <input type="datetime-local" className="input-glass" value={newEvent.end_date} onChange={e => setNewEvent({...newEvent, end_date: e.target.value})} />
               </div>
               <div>
                 <label>Location</label>
@@ -303,17 +337,24 @@ const AdminDashboard = () => {
                           ✅ Approve Program
                         </button>
                       )}
+
+                      {/* Mentor Completion Approval */}
+                      {event.state === 'pending_completion' && (
+                        <button onClick={() => handleApproveCompletion(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#8b5cf6' }}>
+                          ✅ Approve Event Completion
+                        </button>
+                      )}
                       
                       {/* Mentor Certificate Generation */}
                       {event.state === 'completed' && (
                         <div style={{ marginTop: '0.5rem' }}>
                           {event.attendance_file_url && (
                             <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', marginBottom: '0.5rem', textDecoration: 'none' }}>
-                              📥 Review Uploaded Attendance
+                              📥 Review Uploaded Results
                             </a>
                           )}
                           <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
-                            🎓 Mass-Generate Certificates
+                            🎓 Generate Ranked Certificates
                           </button>
                         </div>
                       )}
@@ -323,21 +364,30 @@ const AdminDashboard = () => {
                   {/* COORDINATOR UI */}
                   {['admin', 'coordinator'].includes(user.role) ? (
                     <>
-                      <button onClick={() => startScanner(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                        <QrCode size={18} /> Scan QRs (Check-in)
-                      </button>
+                      {/* Close Event Button */}
+                      {event.state === 'published' && (
+                        <button onClick={() => handleCloseEvent(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#dc2626', borderColor: '#dc2626' }}>
+                          🛑 Close Event (Send to Mentor)
+                        </button>
+                      )}
+
+                      {event.state !== 'completed' && event.state !== 'cancelled' && event.state !== 'pending_completion' && (
+                        <button onClick={() => startScanner(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                          <QrCode size={18} /> Scan QRs (Check-in)
+                        </button>
+                      )}
                       <button onClick={() => handleExportRegistrations(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem' }}>
                         📥 Export Registrations (CSV)
                       </button>
                       
                       <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.5rem' }}>
-                        <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>📤 Upload Attendance to Mentor:</label>
+                        <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>📤 Upload Attendance & Results (CSV with Rank):</label>
                         <input type="file" accept=".csv, .xlsx" onChange={(e) => handleUploadAttendance(event.id, e.target.files[0])} style={{ fontSize: '0.8rem', width: '100%' }} />
                       </div>
                       
                       {event.state === 'completed' && (
-                        <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
-                          🎓 Mass-Generate Certificates
+                        <button onClick={() => handlePublishCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white' }}>
+                          📢 Publish Certificates to Students
                         </button>
                       )}
                     </>

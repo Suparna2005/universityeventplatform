@@ -60,6 +60,16 @@ async def lifespan(app: FastAPI):
             except sqlite3.OperationalError: pass
             try: conn.execute("ALTER TABLE budgets ADD COLUMN approved_by_id INTEGER")
             except sqlite3.OperationalError: pass
+            
+            # Patch new workflow columns
+            try: conn.execute("ALTER TABLE events ADD COLUMN end_date DATETIME")
+            except sqlite3.OperationalError: pass
+            try: conn.execute("ALTER TABLE registrations ADD COLUMN rank TEXT")
+            except sqlite3.OperationalError: pass
+            try: conn.execute("ALTER TABLE certificates ADD COLUMN rank TEXT DEFAULT 'Participation'")
+            except sqlite3.OperationalError: pass
+            try: conn.execute("ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0")
+            except sqlite3.OperationalError: pass
 
             conn.commit()
             conn.close()

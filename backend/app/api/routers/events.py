@@ -19,6 +19,7 @@ def list_events(db: Session = Depends(get_db)):
         "title": e.title,
         "description": e.description,
         "date": e.date,
+        "end_date": e.end_date,
         "location": e.location,
         "capacity": e.capacity,
         # Budget is explicitly hidden from the public/student event list
@@ -41,11 +42,15 @@ def create_event(
     from datetime import datetime
     if event.date.replace(tzinfo=None) < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Cannot schedule an event in the past")
+        
+    if event.end_date and event.end_date <= event.date:
+        raise HTTPException(status_code=400, detail="End date must be after start date")
     
     new_event = Event(
         title=event.title,
         description=event.description,
         date=event.date,
+        end_date=event.end_date,
         location=event.location,
         capacity=event.capacity,
         budget=event.budget,

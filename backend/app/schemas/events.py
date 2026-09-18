@@ -7,6 +7,7 @@ class EventCreate(BaseModel):
     title: str
     description: str
     date: datetime
+    end_date: Optional[datetime] = None
     location: str
     capacity: int
     budget: int = 0
