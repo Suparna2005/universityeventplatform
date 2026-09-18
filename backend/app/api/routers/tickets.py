@@ -36,7 +36,7 @@ def get_qr_ticket(registration_id: int, current_user: User = Depends(get_current
         db.refresh(ticket)
 
     # Generate the actual PNG image bytes
-    qr_bytes = generate_qr_image_bytes(ticket.secure_token)
+    qr_bytes = generate_qr_image_bytes(ticket.secure_token, current_user.profile_picture)
     
     # Return as an image
     return Response(content=qr_bytes, media_type="image/png")
@@ -82,7 +82,7 @@ def get_live_qr_ticket(registration_id: int, current_user: User = Depends(get_cu
     encoded_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
     # Generate the actual PNG image bytes
-    qr_bytes = generate_qr_image_bytes(encoded_jwt)
+    qr_bytes = generate_qr_image_bytes(encoded_jwt, current_user.profile_picture)
     
     # Return as an image
     return Response(content=qr_bytes, media_type="image/png")

@@ -11,4 +11,8 @@ class EventCreate(BaseModel):
     location: str
     capacity: int
     budget: int = 0
+    accessories_req: Optional[str] = None
+    guests_req: Optional[str] = None
+    gifts_req: Optional[str] = None
+    prizes_req: Optional[str] = None
     club_id: Optional[int] = None

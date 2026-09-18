@@ -95,6 +95,28 @@ app.add_middleware(
 app.mount("/static/profiles", StaticFiles(directory=UPLOAD_DIR), name="static_profiles")
 app.mount("/static/attendance", StaticFiles(directory=ATTENDANCE_DIR), name="static_attendance")
 
+@app.on_event("startup")
+def dump_db_state():
+    try:
+        from app.database import SessionLocal
+        from app.models.event import Event
+        import json
+        db = SessionLocal()
+        events = db.query(Event).all()
+        dump = []
+        for e in events:
+            dump.append({
+                "id": e.id,
+                "title": e.title,
+                "state": str(e.state)
+            })
+        with open("debug_dump.json", "w") as f:
+            json.dump(dump, f)
+        db.close()
+    except Exception as e:
+        with open("debug_dump.json", "w") as f:
+            f.write(str(e))
+
 @app.get("/api/health")
 def health_check(db: Session = Depends(get_db)):
     db_status = "unhealthy"

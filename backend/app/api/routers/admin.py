@@ -23,13 +23,17 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
         result.append({
             "id": e.id,
             "title": e.title,
-            "state": e.state.value,
+            "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
             "date": e.date,
             "end_date": e.end_date,
             "feedback_count": len(feedbacks),
             "positive_feedback_count": positive_count,
             "capacity": e.capacity,
             "budget": e.budget,
+            "accessories_req": e.accessories_req,
+            "guests_req": e.guests_req,
+            "gifts_req": e.gifts_req,
+            "prizes_req": e.prizes_req,
             "registered_count": len(e.registrations),
             "attendance_file_url": e.attendance_file_url
         })
@@ -96,37 +100,71 @@ def upload_attendance_file(event_id: int, file: UploadFile = File(...), current_
     db.commit()
     return {"message": "Attendance file uploaded successfully", "url": event.attendance_file_url}
 
-@router.put("/events/{event_id}/approve")
-def approve_event(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@router.put("/events/{event_id}/approve-mentor-initial")
+def approve_mentor_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
-        raise HTTPException(status_code=403, detail="Only mentors and admins can approve events")
-        
+        raise HTTPException(status_code=403, detail="Unauthorized")
     event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-        
-    if event.state != EventState.faculty_review and event.state != EventState.submitted:
-        raise HTTPException(status_code=400, detail="Event is not pending mentor approval")
-        
-    event.state = EventState.published
+    if event.state != EventState.pending_mentor_initial:
+        raise HTTPException(status_code=400, detail="Event is not pending initial mentor approval")
+    event.state = EventState.pending_admin_initial
     db.commit()
-    return {"message": "Event approved and published successfully"}
+    return {"message": "Sent to Admin Panel"}
+
+@router.put("/events/{event_id}/approve-admin-initial")
+def approve_admin_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event.state != EventState.pending_admin_initial:
+        raise HTTPException(status_code=400, detail="Event is not pending initial admin approval")
+    event.state = EventState.pending_finance
+    db.commit()
+    return {"message": "Sent to Finance"}
 
 @router.put("/events/{event_id}/approve-budget")
 def approve_event_budget(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
-        raise HTTPException(status_code=403, detail="Only finance officers can approve budgets")
-        
+        raise HTTPException(status_code=403, detail="Unauthorized")
     event = db.query(Event).filter(Event.id == event_id).first()
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-        
-    if event.state != EventState.finance_review:
+    if event.state != EventState.pending_finance:
         raise HTTPException(status_code=400, detail="Event is not pending budget review")
-        
-    event.state = EventState.faculty_review
+    event.state = EventState.pending_admin_final
     db.commit()
-    return {"message": "Budget approved successfully! Event sent to Mentor."}
+    return {"message": "Budget approved, sent back to Admin"}
+
+@router.put("/events/{event_id}/approve-admin-final")
+def approve_admin_final(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event.state != EventState.pending_admin_final:
+        raise HTTPException(status_code=400, detail="Event is not pending final admin approval")
+    event.state = EventState.pending_mentor_final
+    db.commit()
+    return {"message": "Final admin approval given, sent to Mentor"}
+
+@router.put("/events/{event_id}/approve-mentor-final")
+def approve_mentor_final(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event.state != EventState.pending_mentor_final:
+        raise HTTPException(status_code=400, detail="Event is not pending final mentor approval")
+    event.state = EventState.pending_coordinator_publish
+    db.commit()
+    return {"message": "Approval sent to Coordinator"}
+
+@router.put("/events/{event_id}/publish")
+def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Only Coordinator can publish")
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event.state != EventState.pending_coordinator_publish:
+        raise HTTPException(status_code=400, detail="Event is not pending coordinator publish")
+    event.state = EventState.published
+    db.commit()
+    return {"message": "Event published to students!"}
 
 @router.put("/events/{event_id}/close")
 def close_event(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

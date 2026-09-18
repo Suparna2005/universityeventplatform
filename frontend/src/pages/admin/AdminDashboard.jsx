@@ -14,7 +14,8 @@ const AdminDashboard = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [scanningEventId, setScanningEventId] = useState(null);
   const [newEvent, setNewEvent] = useState({
-    title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: ''
+    title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '',
+    accessories_req: '', guests_req: '', gifts_req: '', prizes_req: ''
   });
 
   const { user, logout } = useContext(AuthContext);
@@ -55,11 +56,15 @@ const AdminDashboard = () => {
         end_date: newEvent.end_date ? new Date(newEvent.end_date).toISOString() : null,
         location: newEvent.location,
         capacity: parseInt(newEvent.capacity),
-        budget: parseInt(newEvent.budget) || 0
+        budget: parseInt(newEvent.budget) || 0,
+        accessories_req: newEvent.accessories_req,
+        guests_req: newEvent.guests_req,
+        gifts_req: newEvent.gifts_req,
+        prizes_req: newEvent.prizes_req
       });
-      alert('Event scheduled successfully!');
+      alert('Event scheduled successfully! Sent to mentor for initial approval.');
       setShowCreateForm(false);
-      setNewEvent({ title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '' });
+      setNewEvent({ title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '', accessories_req: '', guests_req: '', gifts_req: '', prizes_req: '' });
       fetchAdminData();
     } catch (err) {
       alert(`Error: ${err.response?.data?.detail || 'Failed to create event'}`);
@@ -77,24 +82,52 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleApproveEvent = async (eventId) => {
+  const handleApproveMentorInitial = async (eventId) => {
     try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve`);
-      alert("Event approved successfully!");
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-mentor-initial`);
+      alert("Sent to Admin successfully!");
       fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to approve event'}`);
-    }
+    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  };
+
+  const handleApproveAdminInitial = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-initial`);
+      alert("Budget request sent to Finance successfully!");
+      fetchAdminData();
+    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
   };
 
   const handleApproveBudget = async (eventId) => {
     try {
       await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-budget`);
-      alert("Budget approved successfully!");
+      alert("Budget approved! Sent back to Admin.");
       fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to approve budget'}`);
-    }
+    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  };
+
+  const handleApproveAdminFinal = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-final`);
+      alert("Final approval sent to Mentor!");
+      fetchAdminData();
+    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  };
+
+  const handleApproveMentorFinal = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-mentor-final`);
+      alert("Approval sent to Coordinator!");
+      fetchAdminData();
+    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  };
+
+  const handlePublishEvent = async (eventId) => {
+    try {
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/publish`);
+      alert("Event published to Students successfully!");
+      fetchAdminData();
+    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
   };
 
   const handleCloseEvent = async (eventId) => {
@@ -194,7 +227,6 @@ const AdminDashboard = () => {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
         <button onClick={() => setActiveTab('events')} className={activeTab === 'events' ? 'btn-primary' : 'btn-secondary'}>Programs & Events</button>
-        <button onClick={() => setActiveTab('budgets')} className={activeTab === 'budgets' ? 'btn-primary' : 'btn-secondary'}>Financial Budgeting</button>
         <button onClick={() => setActiveTab('analytics')} className={activeTab === 'analytics' ? 'btn-primary' : 'btn-secondary'}>Analytics</button>
       </div>
 
@@ -223,7 +255,7 @@ const AdminDashboard = () => {
              user.role === 'mentor' ? 'Advisory Event Overview' : 
              'Event Management & Analytics'}
           </h2>
-          {['admin', 'coordinator'].includes(user.role) && (
+          {user.role === 'coordinator' && (
             <button onClick={() => setShowCreateForm(!showCreateForm)} className="btn-primary">
               {showCreateForm ? 'Close Form' : '+ Schedule Program'}
             </button>
@@ -262,8 +294,30 @@ const AdminDashboard = () => {
                 <label>Allocated Budget (₹)</label>
                 <input type="number" min="0" className="input-glass" required value={newEvent.budget} onChange={e => setNewEvent({...newEvent, budget: e.target.value})} />
               </div>
+              
+              <div style={{ gridColumn: '1 / -1' }}>
+                <h4 style={{ color: 'var(--primary)', marginBottom: '1rem', marginTop: '1rem' }}>Requirements Segmentation</h4>
+              </div>
+              
+              <div>
+                <label>Accessories Needed</label>
+                <textarea className="input-glass" rows="2" value={newEvent.accessories_req || ''} onChange={e => setNewEvent({...newEvent, accessories_req: e.target.value})} placeholder="e.g. Projector, Sound system..."></textarea>
+              </div>
+              <div>
+                <label>Guests Coming</label>
+                <textarea className="input-glass" rows="2" value={newEvent.guests_req || ''} onChange={e => setNewEvent({...newEvent, guests_req: e.target.value})} placeholder="e.g. Chief Guest Mr. XYZ..."></textarea>
+              </div>
+              <div>
+                <label>Gifts for Guests</label>
+                <textarea className="input-glass" rows="2" value={newEvent.gifts_req || ''} onChange={e => setNewEvent({...newEvent, gifts_req: e.target.value})} placeholder="e.g. Mementos, Bouquets..."></textarea>
+              </div>
+              <div>
+                <label>Prizes for Students</label>
+                <textarea className="input-glass" rows="2" value={newEvent.prizes_req || ''} onChange={e => setNewEvent({...newEvent, prizes_req: e.target.value})} placeholder="e.g. 1st Prize ₹5000, Trophies..."></textarea>
+              </div>
+
               <div style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
-                <button type="submit" className="btn-primary" style={{ width: '100%' }}>Create Program</button>
+                <button type="submit" className="btn-primary" style={{ width: '100%' }}>Create Program (Send to Mentor)</button>
               </div>
             </form>
           </div>
@@ -290,22 +344,53 @@ const AdminDashboard = () => {
                   <h3 style={{ fontSize: '1.5rem', margin: 0 }}>{event.title}</h3>
                 </div>
                 
-                <span style={{ alignSelf: 'flex-start', marginBottom: '1rem' }} className={`badge ${event.state === 'completed' ? 'badge-success' : 'badge-warning'}`}>
-                  {event.state}
+                <span style={{ alignSelf: 'flex-start', marginBottom: '1rem' }} className={`badge ${['completed', 'published'].includes(event.state) ? 'badge-success' : 'badge-warning'}`}>
+                  {event.state === 'pending_mentor_initial' ? 'Sent to Mentor' :
+                   event.state === 'pending_admin_initial' ? 'Sent to Admin' :
+                   event.state === 'pending_finance' ? 'Budget Sent to Finance' :
+                   event.state === 'pending_admin_final' ? 'Finance Approved (At Admin)' :
+                   event.state === 'pending_mentor_final' ? 'Admin Approved (At Mentor)' :
+                   event.state === 'pending_coordinator_publish' ? 'Approved (Ready to Publish)' :
+                   event.state === 'published' ? 'Approved & Published' :
+                   event.state === 'pending_completion' ? 'Pending Completion' :
+                   event.state === 'completed' ? 'Completed' : 
+                   event.state}
                 </span>
                 
+                {/* ADMIN UI (Event Approval Flow) */}
+                {user.role === 'admin' && (
+                  <div style={{ marginTop: 'auto' }}>
+                    {event.state === 'pending_admin_initial' && (
+                      <button onClick={() => handleApproveAdminInitial(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
+                        ✅ Send Budget to Finance
+                      </button>
+                    )}
+                    {event.state === 'pending_admin_final' && (
+                      <button onClick={() => handleApproveAdminFinal(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
+                        ✅ Send Final Approval to Mentor
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* FINANCE ROLE SPECIFIC UI */}
-                {['admin', 'finance', 'coordinator'].includes(user.role) && (
+                {['admin', 'finance'].includes(user.role) && (
                   <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#047857' }}>💰 Financial Status</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '1rem' }}>
+                    <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#047857' }}>💰 Financial Status & Estimations</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
                       <span>Allocated Budget: ₹{(event.budget || 0).toLocaleString()}</span>
                       <span>Est. Expenses: ₹{(event.registered_count * 200).toLocaleString()}</span>
                     </div>
+                    <div style={{ fontSize: '0.85rem', color: '#065f46', marginTop: '0.5rem' }}>
+                      {event.accessories_req && <div style={{ marginBottom: '0.25rem' }}><strong>Accessories:</strong> {event.accessories_req}</div>}
+                      {event.guests_req && <div style={{ marginBottom: '0.25rem' }}><strong>Guests:</strong> {event.guests_req}</div>}
+                      {event.gifts_req && <div style={{ marginBottom: '0.25rem' }}><strong>Gifts:</strong> {event.gifts_req}</div>}
+                      {event.prizes_req && <div style={{ marginBottom: '0.25rem' }}><strong>Prizes:</strong> {event.prizes_req}</div>}
+                    </div>
                     {/* FINANCE APPROVAL UI */}
-                    {['finance', 'admin'].includes(user.role) && event.state === 'finance_review' && (
-                      <button onClick={() => handleApproveBudget(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none' }}>
-                        💰 Approve Budget for Mentor
+                    {event.state === 'pending_finance' && (
+                      <button onClick={() => handleApproveBudget(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none', marginTop: '0.5rem' }}>
+                        💰 Approve Budget (Back to Admin)
                       </button>
                     )}
                   </div>
@@ -318,13 +403,6 @@ const AdminDashboard = () => {
                     <span>👥 Registrations: {event.registered_count} / {event.capacity}</span>
                     <span>📈 Feedback: {event.feedback_count}</span>
                   </div>
-                  {event.feedback_count > 0 && (
-                    <div style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                      <span style={{ color: '#10b981', fontWeight: 'bold' }}>
-                        {Math.round((event.positive_feedback_count / event.feedback_count) * 100)}% Positive Sentiment
-                      </span>
-                    </div>
-                  )}
                 </div>
 
                 <div style={{ marginTop: 'auto' }}>
@@ -332,9 +410,15 @@ const AdminDashboard = () => {
                   {['mentor', 'admin'].includes(user.role) && (
                     <>
                       {/* Mentor Approval */}
-                      {event.state === 'faculty_review' && (
-                        <button onClick={() => handleApproveEvent(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
-                          ✅ Approve Program
+                      {event.state === 'pending_mentor_initial' && (
+                        <button onClick={() => handleApproveMentorInitial(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
+                          ✅ Forward to Admin
+                        </button>
+                      )}
+                      
+                      {event.state === 'pending_mentor_final' && (
+                        <button onClick={() => handleApproveMentorFinal(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#10b981' }}>
+                          ✅ Send Approval to Coordinator
                         </button>
                       )}
 
@@ -362,8 +446,14 @@ const AdminDashboard = () => {
                   )}
 
                   {/* COORDINATOR UI */}
-                  {['admin', 'coordinator'].includes(user.role) ? (
+                  {user.role === 'coordinator' ? (
                     <>
+                      {event.state === 'pending_coordinator_publish' && (
+                        <button onClick={() => handlePublishEvent(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#10b981' }}>
+                          📢 Publish Event to Students
+                        </button>
+                      )}
+
                       {/* Close Event Button */}
                       {event.state === 'published' && (
                         <button onClick={() => handleCloseEvent(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#dc2626', borderColor: '#dc2626' }}>
@@ -371,28 +461,14 @@ const AdminDashboard = () => {
                         </button>
                       )}
 
-                      {event.state !== 'completed' && event.state !== 'cancelled' && event.state !== 'pending_completion' && (
+                      {event.state === 'published' && (
                         <button onClick={() => startScanner(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                           <QrCode size={18} /> Scan QRs (Check-in)
                         </button>
                       )}
-                      <button onClick={() => handleExportRegistrations(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem' }}>
-                        📥 Export Registrations (CSV)
-                      </button>
-                      
-                      <div style={{ background: 'rgba(255,255,255,0.1)', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.5rem' }}>
-                        <label style={{ fontSize: '0.8rem', display: 'block', marginBottom: '0.25rem' }}>📤 Upload Attendance & Results (CSV with Rank):</label>
-                        <input type="file" accept=".csv, .xlsx" onChange={(e) => handleUploadAttendance(event.id, e.target.files[0])} style={{ fontSize: '0.8rem', width: '100%' }} />
-                      </div>
-                      
-                      {event.state === 'completed' && (
-                        <button onClick={() => handlePublishCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white' }}>
-                          📢 Publish Certificates to Students
-                        </button>
-                      )}
                     </>
                   ) : (
-                    <button disabled className="btn-secondary" style={{ width: '100%', opacity: 0.7, cursor: 'not-allowed', display: ['admin', 'coordinator', 'mentor'].includes(user.role) ? 'none' : 'block' }}>
+                    <button disabled className="btn-secondary" style={{ width: '100%', opacity: 0.7, cursor: 'not-allowed', display: ['admin', 'finance', 'mentor'].includes(user.role) ? 'none' : 'block' }}>
                       Locked: Requires Coordinator Access
                     </button>
                   )}

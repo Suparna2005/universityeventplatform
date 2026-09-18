@@ -5,11 +5,12 @@ from datetime import datetime
 from app.models.base import Base
 
 class EventState(str, enum.Enum):
-    draft = "draft"
-    submitted = "submitted"
-    faculty_review = "faculty_review"
-    finance_review = "finance_review"
-    approved = "approved"
+    pending_mentor_initial = "pending_mentor_initial"
+    pending_admin_initial = "pending_admin_initial"
+    pending_finance = "pending_finance"
+    pending_admin_final = "pending_admin_final"
+    pending_mentor_final = "pending_mentor_final"
+    pending_coordinator_publish = "pending_coordinator_publish"
     published = "published"
     registration_closed = "registration_closed"
     in_progress = "in_progress"
@@ -28,7 +29,14 @@ class Event(Base):
     location = Column(String, nullable=False)
     capacity = Column(Integer, nullable=False)
     budget = Column(Integer, default=0, nullable=False)
-    state = Column(Enum(EventState), default=EventState.draft, nullable=False)
+    
+    # Segmented Requirements
+    accessories_req = Column(Text, nullable=True)
+    guests_req = Column(Text, nullable=True)
+    gifts_req = Column(Text, nullable=True)
+    prizes_req = Column(Text, nullable=True)
+
+    state = Column(Enum(EventState), default=EventState.pending_mentor_initial, nullable=False)
     attendance_file_url = Column(String, nullable=True)
     
     club_id = Column(Integer, ForeignKey("clubs.id"))
