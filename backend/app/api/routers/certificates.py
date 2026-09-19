@@ -12,8 +12,8 @@ router = APIRouter(prefix="/api/certificates", tags=["certificates"])
 
 @router.post("/events/{event_id}/generate")
 def bulk_generate_certificates(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.mentor, RoleEnum.admin]:
-        raise HTTPException(status_code=403, detail="Only mentors can generate certificates")
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only admins can generate certificates")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if event.state != EventState.completed:
@@ -41,7 +41,7 @@ def bulk_generate_certificates(event_id: int, current_user: User = Depends(get_c
                 event_id=event_id,
                 certificate_number=f"CERT-{uuid.uuid4().hex[:8].upper()}",
                 rank=reg.rank or "Participation",
-                is_published=0
+                is_published=1
             )
             db.add(cert)
             
@@ -62,7 +62,7 @@ def bulk_generate_certificates(event_id: int, current_user: User = Depends(get_c
             generated_count += 1
             
     db.commit()
-    return {"message": f"Successfully generated {generated_count} certificates. Ready for coordinator to publish."}
+    return {"message": f"Successfully generated and published {generated_count} certificates for students."}
 
 @router.put("/events/{event_id}/publish")
 def publish_certificates(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -442,20 +442,24 @@ const AdminDashboard = () => {
                         </button>
                       )}
                       
-                      {/* Mentor Certificate Generation */}
-                      {event.state === 'completed' && (
-                        <div style={{ marginTop: '0.5rem' }}>
-                          {event.attendance_file_url && (
-                            <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', marginBottom: '0.5rem', textDecoration: 'none' }}>
-                              📥 Review Uploaded Results
-                            </a>
-                          )}
-                          <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
-                            🎓 Generate Ranked Certificates
-                          </button>
+                      {/* Review Uploaded CSV (Mentor/Admin) */}
+                      {['pending_completion', 'completed'].includes(event.state) && event.attendance_file_url && (
+                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
+                          <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', textDecoration: 'none', color: '#047857', borderColor: '#047857' }}>
+                            📥 Review Uploaded Results (CSV)
+                          </a>
                         </div>
                       )}
                     </>
+                  )}
+
+                  {/* Admin Certificate Generation */}
+                  {user.role === 'admin' && event.state === 'completed' && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
+                        🎓 Generate Certificates for Students
+                      </button>
+                    </div>
                   )}
 
                   {/* COORDINATOR UI */}
@@ -486,6 +490,21 @@ const AdminDashboard = () => {
                           📊 Download Attendance CSV
                         </button>
                       )}
+
+                      {/* Upload Attendance File */}
+                      {['published', 'pending_completion'].includes(event.state) && (
+                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
+                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>📤 Upload Final Results (CSV) for Mentor/Admin:</label>
+                          <input 
+                            type="file" 
+                            accept=".csv"
+                            onChange={(e) => handleUploadAttendance(event.id, e.target.files[0])}
+                            className="input-glass"
+                            style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
+                          />
+                        </div>
+                      )}
+
                     </>
                   ) : (
                     <button disabled className="btn-secondary" style={{ width: '100%', opacity: 0.7, cursor: 'not-allowed', display: ['admin', 'finance', 'mentor'].includes(user.role) ? 'none' : 'block' }}>
