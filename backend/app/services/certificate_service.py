@@ -1,5 +1,5 @@
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.utils import ImageReader
 from io import BytesIO
 import os
@@ -7,8 +7,8 @@ import os
 def generate_certificate_pdf_bytes(student_name: str, event_title: str, date_str: str, cert_number: str, rank: str = "Participation", template_path: str = None) -> bytes:
     """Generates a PDF certificate using ReportLab."""
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    c = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
 
     # Draw template background if provided
     if template_path and os.path.exists(template_path):

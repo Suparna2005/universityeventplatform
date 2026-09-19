@@ -184,8 +184,8 @@ def approve_mentor_final(event_id: int, current_user: User = Depends(get_current
 
 @router.put("/events/{event_id}/publish")
 def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
-        raise HTTPException(status_code=403, detail="Only Coordinator or Admin can publish")
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Only Coordinator can publish")
     event = db.query(Event).filter(Event.id == event_id).first()
     if event.state != EventState.pending_coordinator_publish:
         raise HTTPException(status_code=400, detail="Event is not pending coordinator publish")
@@ -196,7 +196,7 @@ def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_
 @router.put("/events/{event_id}/close")
 def close_event(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
-        raise HTTPException(status_code=403, detail="Only coordinators can close events")
+        raise HTTPException(status_code=403, detail="Only coordinators or admins can close events")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -227,8 +227,8 @@ def approve_completion(event_id: int, current_user: User = Depends(get_current_u
 
 @router.get("/events/{event_id}/export")
 def export_registrations(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Only Coordinator can download attendance")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:

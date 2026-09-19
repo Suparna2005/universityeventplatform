@@ -268,7 +268,7 @@ const AdminDashboard = () => {
              user.role === 'mentor' ? 'Advisory Event Overview' : 
              'Event Management & Analytics'}
           </h2>
-          {['coordinator', 'admin'].includes(user.role) && (
+          {user.role === 'coordinator' && (
             <button onClick={() => setShowCreateForm(!showCreateForm)} className="btn-primary">
               {showCreateForm ? 'Close Form' : '+ Schedule Program'}
             </button>
@@ -489,10 +489,11 @@ const AdminDashboard = () => {
                     </div>
                   )}
 
-                  {/* COORDINATOR / ADMIN UI */}
-                  {['coordinator', 'admin'].includes(user.role) ? (
+                  {/* COORDINATOR UI */}
+                  {user.role === 'coordinator' ? (
                     <>
-                      {event.state === 'pending_coordinator_publish' && (
+                      {/* Publish is strictly Coordinator only */}
+                      {user.role === 'coordinator' && event.state === 'pending_coordinator_publish' && (
                         <button onClick={() => handlePublishEvent(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#10b981' }}>
                           📢 Publish Event to Students
                         </button>
