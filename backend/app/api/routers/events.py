@@ -36,8 +36,8 @@ def create_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role != RoleEnum.coordinator:
-        raise HTTPException(status_code=403, detail="Only coordinators can schedule programs")
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Only coordinators or admins can schedule programs")
         
     from datetime import datetime
     # Removed past date restriction for easier testing

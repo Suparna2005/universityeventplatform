@@ -29,27 +29,61 @@ def fix_postgres():
             ]
             for col_name, col_type in columns_to_add:
                 try:
+                    conn.execute(text("COMMIT"))
                     conn.execute(text(f"ALTER TABLE events ADD COLUMN {col_name} {col_type}"))
                     print(f"Added column {col_name} to events table.")
                 except Exception as e:
-                    # Column might already exist
                     if "already exists" in str(e).lower():
-                        print(f"Column {col_name} already exists.")
+                        pass
                     else:
                         print(f"Warning on {col_name}: {e}")
+                        
+            # Add rank to registrations
+            try:
+                conn.execute(text("COMMIT"))
+                conn.execute(text("ALTER TABLE registrations ADD COLUMN rank TEXT"))
+                print("Added column rank to registrations table.")
+            except Exception as e:
+                pass
+
+            # Add rank and is_published to certificates
+            try:
+                conn.execute(text("COMMIT"))
+                conn.execute(text("ALTER TABLE certificates ADD COLUMN rank TEXT DEFAULT 'Participation'"))
+                print("Added column rank to certificates table.")
+            except Exception as e:
+                pass
+                
+            try:
+                conn.execute(text("COMMIT"))
+                conn.execute(text("ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0"))
+                print("Added column is_published to certificates table.")
+            except Exception as e:
+                pass
 
             # Update Enum
             # In PostgreSQL, we can use ALTER TYPE to add a new value
-            try:
-                # Need to run outside transaction block to ALTER TYPE (commit current open transaction)
-                conn.execute(text("COMMIT"))
-                conn.execute(text("ALTER TYPE eventstate ADD VALUE 'pending_coordinator_publish'"))
-                print("Added 'pending_coordinator_publish' to eventstate enum.")
-            except Exception as e:
-                if "already exists" in str(e).lower():
-                    print("Enum value 'pending_coordinator_publish' already exists.")
-                else:
-                    print(f"Warning adding enum value: {e}")
+            enum_values = [
+                "pending_mentor_initial",
+                "pending_admin_initial",
+                "pending_finance",
+                "pending_admin_final",
+                "pending_mentor_final",
+                "pending_coordinator_publish",
+                "pending_completion"
+            ]
+            
+            for val in enum_values:
+                try:
+                    # Need to run outside transaction block to ALTER TYPE
+                    conn.execute(text("COMMIT"))
+                    conn.execute(text(f"ALTER TYPE eventstate ADD VALUE '{val}'"))
+                    print(f"Added '{val}' to eventstate enum.")
+                except Exception as e:
+                    if "already exists" in str(e).lower():
+                        pass
+                    else:
+                        print(f"Warning adding enum value {val}: {e}")
 
             print("PostgreSQL Database successfully updated!")
     except Exception as e:

@@ -17,6 +17,7 @@ class EventState(str, enum.Enum):
     pending_completion = "pending_completion"
     completed = "completed"
     cancelled = "cancelled"
+    finance_review = "finance_review"  # legacy state
 
 class Event(Base):
     __tablename__ = "events"

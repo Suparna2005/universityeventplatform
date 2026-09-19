@@ -184,8 +184,8 @@ def approve_mentor_final(event_id: int, current_user: User = Depends(get_current
 
 @router.put("/events/{event_id}/publish")
 def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.coordinator:
-        raise HTTPException(status_code=403, detail="Only Coordinator can publish")
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Only Coordinator or Admin can publish")
     event = db.query(Event).filter(Event.id == event_id).first()
     if event.state != EventState.pending_coordinator_publish:
         raise HTTPException(status_code=400, detail="Event is not pending coordinator publish")
