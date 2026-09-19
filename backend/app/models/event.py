@@ -38,6 +38,7 @@ class Event(Base):
 
     state = Column(Enum(EventState), default=EventState.pending_mentor_initial, nullable=False)
     attendance_file_url = Column(String, nullable=True)
+    certificate_template_url = Column(String, nullable=True)
     
     club_id = Column(Integer, ForeignKey("clubs.id"))
     club = relationship("Club", back_populates="events")

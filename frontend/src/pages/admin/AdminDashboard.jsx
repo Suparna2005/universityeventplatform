@@ -453,11 +453,38 @@ const AdminDashboard = () => {
                     </>
                   )}
 
-                  {/* Admin Certificate Generation */}
+                  {/* Admin Certificate Generation & Template Upload */}
                   {user.role === 'admin' && event.state === 'completed' && (
-                    <div style={{ marginTop: '0.5rem' }}>
+                    <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px' }}>
+                      <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981', fontSize: '0.9rem' }}>🎓 Certificate Management</p>
+                      
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>🖼️ (Optional) Upload Custom Template Background (PNG/JPG):</label>
+                        <input 
+                          type="file" 
+                          accept=".png,.jpg,.jpeg"
+                          onChange={async (e) => {
+                            if (!e.target.files[0]) return;
+                            const formData = new FormData();
+                            formData.append("file", e.target.files[0]);
+                            try {
+                              await axios.post(`${baseURL}/api/admin/events/${event.id}/upload-certificate-template`, formData);
+                              alert("Custom template uploaded successfully!");
+                              fetchAdminData();
+                            } catch (err) {
+                              alert(`Error: ${err.response?.data?.detail || 'Failed to upload template'}`);
+                            }
+                          }}
+                          className="input-glass"
+                          style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
+                        />
+                        {event.certificate_template_url && (
+                          <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '0.25rem' }}>✓ Custom Template Active</div>
+                        )}
+                      </div>
+
                       <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
-                        🎓 Generate Certificates for Students
+                        ⚡ Generate & Publish Certificates to Students
                       </button>
                     </div>
                   )}

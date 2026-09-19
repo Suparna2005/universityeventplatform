@@ -100,6 +100,33 @@ def upload_attendance_file(event_id: int, file: UploadFile = File(...), current_
     db.commit()
     return {"message": "Attendance file uploaded successfully", "url": event.attendance_file_url}
 
+@router.post("/events/{event_id}/upload-certificate-template")
+def upload_certificate_template(event_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only admins can upload certificate templates")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    ext = file.filename.split('.')[-1]
+    filename = f"template_{event_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    
+    # Ensure directory exists
+    upload_dir = os.path.join("uploads", "certificates")
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_path = os.path.join(upload_dir, filename)
+    
+    with open(file_path, "wb") as buffer:
+        content = file.file.read()
+        buffer.write(content)
+        
+    event.certificate_template_url = f"/static/certificates/{filename}"
+    db.commit()
+    
+    return {"message": "Certificate template uploaded successfully", "url": event.certificate_template_url}
+
 @router.put("/events/{event_id}/approve-mentor-initial")
 def approve_mentor_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
@@ -212,7 +239,7 @@ def export_registrations(event_id: int, current_user: User = Depends(get_current
     
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Student Name", "Email", "Student Number", "Department", "Gender", "Registration Status", "Check-in Status", "Check-in Time"])
+    writer.writerow(["Student Name", "Email", "Student Number", "Department", "Gender", "Registration Status", "Check-in Status", "Check-in Time", "Rank"])
     
     for reg in registrations:
         student = reg.student
@@ -230,7 +257,8 @@ def export_registrations(event_id: int, current_user: User = Depends(get_current
             user.gender or "Unknown",
             reg.status.value,
             check_in_status,
-            check_in_time
+            check_in_time,
+            reg.rank or "Participation"
         ])
         
     output.seek(0)

@@ -7,6 +7,7 @@ from app.models.user import User, RoleEnum
 from app.api.dependencies import get_current_user
 from app.services.certificate_service import generate_certificate_pdf_bytes
 import uuid
+import os
 
 router = APIRouter(prefix="/api/certificates", tags=["certificates"])
 
@@ -91,12 +92,19 @@ def download_certificate(certificate_id: int, current_user: User = Depends(get_c
     student = cert.student.user
     event = cert.event
     
+    template_path = None
+    if event.certificate_template_url:
+        # url is /static/certificates/filename.ext
+        filename = event.certificate_template_url.split('/')[-1]
+        template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "certificates", filename)
+    
     pdf_bytes = generate_certificate_pdf_bytes(
         student_name=student.name,
         event_title=event.title,
         date_str=event.date.strftime("%B %d, %Y"),
         cert_number=cert.certificate_number,
-        rank=cert.rank
+        rank=cert.rank,
+        template_path=template_path
     )
     
     return Response(

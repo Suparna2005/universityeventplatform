@@ -47,25 +47,31 @@ def create_event(
     if event.end_date and event.end_date <= event.date:
         raise HTTPException(status_code=400, detail="End date must be after start date")
     
-    new_event = Event(
-        title=event.title,
-        description=event.description,
-        date=event.date,
-        end_date=event.end_date,
-        location=event.location,
-        capacity=event.capacity,
-        budget=event.budget,
-        accessories_req=event.accessories_req,
-        guests_req=event.guests_req,
-        gifts_req=event.gifts_req,
-        prizes_req=event.prizes_req,
-        club_id=event.club_id,
-        state=EventState.pending_mentor_initial  # First goes to mentor
-    )
-    db.add(new_event)
-    db.commit()
-    db.refresh(new_event)
-    return {"message": "Event created successfully", "id": new_event.id}
+    try:
+        new_event = Event(
+            title=event.title,
+            description=event.description,
+            date=event.date,
+            end_date=event.end_date,
+            location=event.location,
+            capacity=event.capacity,
+            budget=event.budget,
+            accessories_req=event.accessories_req,
+            guests_req=event.guests_req,
+            gifts_req=event.gifts_req,
+            prizes_req=event.prizes_req,
+            club_id=event.club_id,
+            state=EventState.pending_mentor_initial  # First goes to mentor
+        )
+        db.add(new_event)
+        db.commit()
+        db.refresh(new_event)
+        return {"message": "Event created successfully", "id": new_event.id}
+    except Exception as e:
+        db.rollback()
+        import traceback
+        error_msg = str(e)
+        raise HTTPException(status_code=500, detail=f"DB Error: {error_msg}")
 
 @router.delete("/{event_id}")
 def delete_event(

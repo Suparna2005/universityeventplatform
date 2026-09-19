@@ -1,5 +1,10 @@
 import os
 from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+
+# Load .env file explicitly from the backend directory
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+load_dotenv(dotenv_path=env_path)
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "University Event Management Platform"

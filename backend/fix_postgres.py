@@ -25,6 +25,7 @@ def fix_postgres():
                 ("guests_req", "TEXT"),
                 ("gifts_req", "TEXT"),
                 ("prizes_req", "TEXT"),
+                ("certificate_template_url", "TEXT"),
             ]
             for col_name, col_type in columns_to_add:
                 try:

@@ -24,6 +24,25 @@ try:
 except Exception:
     pass
 
+@app.get("/api/debug-db")
+def debug_db():
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")).fetchall()
+            tables = [row[0] for row in result]
+            
+            # Also check if events table has certificate_template_url
+            has_col = False
+            if 'events' in tables:
+                cols = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='events'")).fetchall()
+                has_col = 'certificate_template_url' in [c[0] for c in cols]
+                
+            return {"status": "ok", "tables": tables, "events_has_cert_col": has_col}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "error": str(e), "trace": traceback.format_exc()}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Auto-patch SQLite database if running locally on SQLite
@@ -56,6 +75,16 @@ async def lifespan(app: FastAPI):
                 try: conn.execute("ALTER TABLE budgets ADD COLUMN approved_by_id INTEGER")
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE events ADD COLUMN end_date DATETIME")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN certificate_template_url TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN accessories_req TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN guests_req TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN gifts_req TEXT")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE events ADD COLUMN prizes_req TEXT")
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE registrations ADD COLUMN rank TEXT")
                 except sqlite3.OperationalError: pass
@@ -94,6 +123,10 @@ app.add_middleware(
 
 app.mount("/static/profiles", StaticFiles(directory=UPLOAD_DIR), name="static_profiles")
 app.mount("/static/attendance", StaticFiles(directory=ATTENDANCE_DIR), name="static_attendance")
+
+CERTIFICATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "certificates")
+os.makedirs(CERTIFICATE_DIR, exist_ok=True)
+app.mount("/static/certificates", StaticFiles(directory=CERTIFICATE_DIR), name="static_certificates")
 
 @app.on_event("startup")
 def dump_db_state():
