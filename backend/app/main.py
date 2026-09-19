@@ -24,24 +24,6 @@ try:
 except Exception:
     pass
 
-@app.get("/api/debug-db")
-def debug_db():
-    from sqlalchemy import text
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")).fetchall()
-            tables = [row[0] for row in result]
-            
-            # Also check if events table has certificate_template_url
-            has_col = False
-            if 'events' in tables:
-                cols = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name='events'")).fetchall()
-                has_col = 'certificate_template_url' in [c[0] for c in cols]
-                
-            return {"status": "ok", "tables": tables, "events_has_cert_col": has_col}
-    except Exception as e:
-        import traceback
-        return {"status": "error", "error": str(e), "trace": traceback.format_exc()}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
