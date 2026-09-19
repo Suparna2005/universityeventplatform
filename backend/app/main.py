@@ -133,6 +133,35 @@ def health_check(db: Session = Depends(get_db)):
         "database": db_status
     }
 
+@app.get("/api/setup-database")
+def setup_database():
+    try:
+        # Create all tables
+        Base.metadata.create_all(bind=engine)
+        
+        # Insert seed users if they don't exist
+        from app.database import SessionLocal
+        from app.models.user import User
+        db = SessionLocal()
+        
+        if db.query(User).count() == 0:
+            seed_users = [
+                User(email='admin@example.com', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='admin', is_active=True),
+                User(email='coordinator@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='coordinator', is_active=True),
+                User(email='finance@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='finance', is_active=True),
+                User(email='mentor@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='mentor', is_active=True),
+                User(email='student001@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='student', is_active=True)
+            ]
+            db.add_all(seed_users)
+            db.commit()
+            db.close()
+            return {"message": "Database tables created and 5 demo accounts (admin, coordinator, finance, mentor, student) inserted successfully!"}
+            
+        db.close()
+        return {"message": "Database tables already exist and are fully populated!"}
+    except Exception as e:
+        return {"error": str(e)}
+
 # Mount routers
 from app.api.routers.events import router as events_router
 from app.api.routers.auth import router as auth_router

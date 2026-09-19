@@ -159,8 +159,21 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleExportRegistrations = (eventId) => {
-    window.open(`${baseURL}/api/admin/events/${eventId}/export`, '_blank');
+  const handleExportRegistrations = async (eventId) => {
+    try {
+      const response = await axios.get(`${baseURL}/api/admin/events/${eventId}/export`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `attendance_report_${eventId}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      alert(`Error downloading CSV: ${err.response?.data?.detail || err.message}`);
+    }
   };
 
   const handleUploadAttendance = async (eventId, file) => {
@@ -464,6 +477,13 @@ const AdminDashboard = () => {
                       {event.state === 'published' && (
                         <button onClick={() => startScanner(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                           <QrCode size={18} /> Scan QRs (Check-in)
+                        </button>
+                      )}
+
+                      {/* Export Attendance Button */}
+                      {['published', 'pending_completion', 'completed'].includes(event.state) && (
+                        <button onClick={() => handleExportRegistrations(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#047857', borderColor: '#047857' }}>
+                          📊 Download Attendance CSV
                         </button>
                       )}
                     </>

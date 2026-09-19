@@ -208,26 +208,34 @@ def export_registrations(event_id: int, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Event not found")
         
     registrations = db.query(Registration).filter(Registration.event_id == event_id).all()
+    from app.models.engagement import Attendance
     
     output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Student Name", "Email", "Student Number", "Department", "Gender", "Status"])
+    writer.writerow(["Student Name", "Email", "Student Number", "Department", "Gender", "Registration Status", "Check-in Status", "Check-in Time"])
     
     for reg in registrations:
         student = reg.student
         user = student.user
+        attendance = db.query(Attendance).filter(Attendance.registration_id == reg.id).first()
+        
+        check_in_status = "Present" if attendance else "Absent"
+        check_in_time = attendance.check_in_time.strftime("%Y-%m-%d %H:%M:%S") if attendance else "N/A"
+        
         writer.writerow([
             user.name,
             user.email,
             student.student_number,
             user.department or "Unknown",
             user.gender or "Unknown",
-            reg.status.value
+            reg.status.value,
+            check_in_status,
+            check_in_time
         ])
         
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]), 
         media_type="text/csv", 
-        headers={"Content-Disposition": f"attachment; filename=registrations_{event_id}.csv"}
+        headers={"Content-Disposition": f"attachment; filename=attendance_report_{event_id}.csv"}
     )
