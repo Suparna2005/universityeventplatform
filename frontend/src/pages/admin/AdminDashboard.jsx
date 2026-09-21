@@ -505,7 +505,7 @@ const AdminDashboard = () => {
                       </div>
                       
                       <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>✨ OR 2) Generate with Free AI (Hugging Face):</label>
+                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>✨ OR 2) Generate Template with Free AI:</label>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                           <input 
                             type="text" 
@@ -530,7 +530,10 @@ const AdminDashboard = () => {
                       
                       <div style={{ marginBottom: '1rem' }}>
                         {event.certificate_template_url && (
-                          <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '0.25rem' }}>✓ Custom Template Active</div>
+                          <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.8)', borderRadius: '8px', textAlign: 'center' }}>
+                            <div style={{ fontSize: '0.8rem', color: '#10b981', marginBottom: '0.5rem', fontWeight: 'bold' }}>✓ Custom Template Active</div>
+                            <img src={`${baseURL}${event.certificate_template_url}`} alt="Certificate Template Preview" style={{ maxWidth: '100%', maxHeight: '150px', border: '1px solid #ccc', borderRadius: '4px' }} />
+                          </div>
                         )}
                       </div>
 

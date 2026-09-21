@@ -128,6 +128,7 @@ def upload_certificate_template(event_id: int, file: UploadFile = File(...), cur
     return {"message": "Certificate template uploaded successfully", "url": event.certificate_template_url}
 
 import requests
+import urllib.parse
 from pydantic import BaseModel
 
 class AIPromptRequest(BaseModel):
@@ -142,20 +143,17 @@ def generate_ai_template(event_id: int, request: AIPromptRequest, current_user: 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
         
-    hf_api_key = os.getenv("HUGGINGFACE_API_KEY")
-    if not hf_api_key:
-        raise HTTPException(status_code=400, detail="HUGGINGFACE_API_KEY is not set in the .env file! Please add a free Hugging Face token.")
-        
-    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-    headers = {"Authorization": f"Bearer {hf_api_key}"}
-    
     # We explicitly force the AI to leave it completely blank in the middle
-    full_prompt = f"A completely blank modern university certificate template background, landscape orientation. Elegant {request.prompt} borders around the edges. The entire center of the image MUST be completely empty, blank white paper with absolutely NO text, NO words, and NO lines. Highly detailed, professional, official award certificate layout, clean design, 16:9 aspect ratio."
+    full_prompt = f"A completely blank modern university certificate template background, landscape orientation. Elegant {request.prompt} borders around the edges. The entire center of the image MUST be completely empty, blank white paper with absolutely NO text, NO words, and NO lines. Highly detailed, professional, official award certificate layout, clean design."
+    encoded_prompt = urllib.parse.quote(full_prompt)
+    
+    # Using Pollinations AI (100% Free, No API Key Required)
+    API_URL = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1920&height=1080&nologo=true"
     
     try:
-        response = requests.post(API_URL, headers=headers, json={"inputs": full_prompt})
+        response = requests.get(API_URL)
         if response.status_code != 200:
-            raise Exception(f"Hugging Face API returned {response.status_code}: {response.text}")
+            raise Exception(f"Pollinations AI returned {response.status_code}")
             
         image_bytes = response.content
         
@@ -170,10 +168,10 @@ def generate_ai_template(event_id: int, request: AIPromptRequest, current_user: 
         event.certificate_template_url = f"/static/certificates/{filename}"
         db.commit()
         
-        return {"message": "AI template generated successfully", "url": event.certificate_template_url}
+        return {"message": "AI template generated successfully using Pollinations", "url": event.certificate_template_url}
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to communicate with Hugging Face AI: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to communicate with Pollinations AI: {str(e)}")
 
 @router.put("/events/{event_id}/approve-mentor-initial")
 def approve_mentor_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
