@@ -96,7 +96,8 @@ def download_certificate(certificate_id: int, current_user: User = Depends(get_c
     if event.certificate_template_url:
         # url is /static/certificates/filename.ext
         filename = event.certificate_template_url.split('/')[-1]
-        template_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "certificates", filename)
+        # Resolve to backend/uploads/certificates
+        template_path = os.path.join(os.getcwd(), "uploads", "certificates", filename)
     
     pdf_bytes = generate_certificate_pdf_bytes(
         student_name=student.name,

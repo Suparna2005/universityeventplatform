@@ -101,8 +101,23 @@ const Dashboard = () => {
     }
   };
 
-  const downloadCertificate = (certId) => {
-    window.open(`${baseURL}/api/certificates/${certId}/download`, '_blank');
+  const downloadCertificate = async (certId) => {
+    try {
+      const response = await axios.get(`${baseURL}/api/certificates/${certId}/download`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Certificate_${certId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      alert("Failed to download certificate. Please try again.");
+      console.error(err);
+    }
   };
 
   return (
