@@ -13,6 +13,10 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [scanningEventId, setScanningEventId] = useState(null);
+  
+  // AI Template Generation State
+  const [aiPrompts, setAiPrompts] = useState({});
+  const [aiLoading, setAiLoading] = useState({});
   const [newEvent, setNewEvent] = useState({
     title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '',
     accessories_req: '', guests_req: '', gifts_req: '', prizes_req: ''
@@ -30,6 +34,26 @@ const AdminDashboard = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGenerateAITemplate = async (eventId) => {
+    const prompt = aiPrompts[eventId];
+    if (!prompt) {
+      alert("Please enter a style or colors for the AI!");
+      return;
+    }
+    
+    setAiLoading({...aiLoading, [eventId]: true});
+    try {
+      await axios.post(`${baseURL}/api/admin/events/${eventId}/generate-ai-template`, { prompt });
+      alert("AI successfully generated and applied the new custom background!");
+      setAiPrompts({...aiPrompts, [eventId]: ''});
+      fetchAdminData();
+    } catch (err) {
+      alert(`Error: ${err.response?.data?.detail || 'Failed to generate AI template'}`);
+    } finally {
+      setAiLoading({...aiLoading, [eventId]: false});
     }
   };
 
@@ -459,7 +483,7 @@ const AdminDashboard = () => {
                       <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981', fontSize: '0.9rem' }}>🎓 Certificate Management</p>
                       
                       <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>🖼️ (Optional) Upload Custom Template Background (PNG/JPG):</label>
+                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>🖼️ 1) Manual Upload (PNG/JPG):</label>
                         <input 
                           type="file" 
                           accept=".png,.jpg,.jpeg"
@@ -478,6 +502,33 @@ const AdminDashboard = () => {
                           className="input-glass"
                           style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
                         />
+                      </div>
+                      
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>✨ OR 2) Generate with Free AI (Hugging Face):</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input 
+                            type="text" 
+                            className="input-glass" 
+                            placeholder="e.g. Dark red and gold colors..." 
+                            value={aiPrompts[event.id] || ''}
+                            onChange={(e) => setAiPrompts({...aiPrompts, [event.id]: e.target.value})}
+                            style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}
+                            disabled={aiLoading[event.id]}
+                          />
+                          <button 
+                            onClick={() => handleGenerateAITemplate(event.id)} 
+                            className="btn-primary" 
+                            style={{ background: '#3b82f6', padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+                            disabled={aiLoading[event.id]}
+                          >
+                            {aiLoading[event.id] ? '⏳ Generating...' : 'Generate AI'}
+                          </button>
+                        </div>
+                        {aiLoading[event.id] && <p style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '0.25rem' }}>This might take 15-30 seconds. Please wait...</p>}
+                      </div>
+                      
+                      <div style={{ marginBottom: '1rem' }}>
                         {event.certificate_template_url && (
                           <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '0.25rem' }}>✓ Custom Template Active</div>
                         )}

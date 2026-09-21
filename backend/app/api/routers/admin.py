@@ -127,6 +127,54 @@ def upload_certificate_template(event_id: int, file: UploadFile = File(...), cur
     
     return {"message": "Certificate template uploaded successfully", "url": event.certificate_template_url}
 
+import requests
+from pydantic import BaseModel
+
+class AIPromptRequest(BaseModel):
+    prompt: str
+
+@router.post("/events/{event_id}/generate-ai-template")
+def generate_ai_template(event_id: int, request: AIPromptRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only admins can generate AI templates")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    hf_api_key = os.getenv("HUGGINGFACE_API_KEY")
+    if not hf_api_key:
+        raise HTTPException(status_code=400, detail="HUGGINGFACE_API_KEY is not set in the .env file! Please add a free Hugging Face token.")
+        
+    API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+    headers = {"Authorization": f"Bearer {hf_api_key}"}
+    
+    # We explicitly force the AI to leave it completely blank in the middle
+    full_prompt = f"A completely blank modern university certificate template background, landscape orientation. Elegant {request.prompt} borders around the edges. The entire center of the image MUST be completely empty, blank white paper with absolutely NO text, NO words, and NO lines. Highly detailed, professional, official award certificate layout, clean design, 16:9 aspect ratio."
+    
+    try:
+        response = requests.post(API_URL, headers=headers, json={"inputs": full_prompt})
+        if response.status_code != 200:
+            raise Exception(f"Hugging Face API returned {response.status_code}: {response.text}")
+            
+        image_bytes = response.content
+        
+        filename = f"template_ai_{event_id}_{uuid.uuid4().hex[:8]}.jpg"
+        upload_dir = os.path.join("uploads", "certificates")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_path = os.path.join(upload_dir, filename)
+        
+        with open(file_path, "wb") as buffer:
+            buffer.write(image_bytes)
+            
+        event.certificate_template_url = f"/static/certificates/{filename}"
+        db.commit()
+        
+        return {"message": "AI template generated successfully", "url": event.certificate_template_url}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to communicate with Hugging Face AI: {str(e)}")
+
 @router.put("/events/{event_id}/approve-mentor-initial")
 def approve_mentor_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
