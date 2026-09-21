@@ -201,3 +201,11 @@ app.include_router(admin_router)
 app.include_router(profile_router)
 app.include_router(finance_router)
 app.include_router(analytics_router)
+
+# Mount static files to serve the certificate templates
+import os
+from fastapi.staticfiles import StaticFiles
+
+# Ensure the directory exists before mounting
+os.makedirs("uploads/certificates", exist_ok=True)
+app.mount("/static/certificates", StaticFiles(directory="uploads/certificates"), name="certificates")
