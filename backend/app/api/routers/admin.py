@@ -59,7 +59,9 @@ def upload_attendance_file(event_id: int, file: UploadFile = File(...), current_
         
     ext = file.filename.split('.')[-1]
     filename = f"attendance_{event_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    file_path = os.path.join("uploads", "attendance", filename)
+    upload_dir = os.path.join("uploads", "attendance")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, filename)
     
     # Read the file content first
     content = file.file.read()
