@@ -10,8 +10,12 @@ router = APIRouter(prefix="/api/events", tags=["events"])
 
 @router.get("")
 def list_events(db: Session = Depends(get_db)):
-    # Return all published events
-    events = db.query(Event).filter(Event.state == EventState.published).all()
+    # Return events that students should be able to see (published and finished events)
+    events = db.query(Event).filter(Event.state.in_([
+        EventState.published, 
+        EventState.pending_completion, 
+        EventState.completed
+    ])).all()
     
     # We serialize manually for now before adding Pydantic schemas
     return [{
