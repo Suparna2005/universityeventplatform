@@ -41,6 +41,23 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
         
     return result
 
+@router.get("/events/{event_id}/feedback")
+def get_event_feedback(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.mentor]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    feedbacks = db.query(Feedback).filter(Feedback.event_id == event_id).order_by(Feedback.created_at.desc()).all()
+    
+    return [
+        {
+            "id": f.id,
+            "rating": f.rating,
+            "comment": f.comment,
+            "sentiment": f.sentiment_score,
+            "created_at": f.created_at
+        } for f in feedbacks
+    ]
+
 import csv
 import os
 import shutil

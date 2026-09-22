@@ -14,13 +14,17 @@ const AdminDashboard = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [scanningEventId, setScanningEventId] = useState(null);
   
-  // AI Template Generation State
   const [aiPrompts, setAiPrompts] = useState({});
   const [aiLoading, setAiLoading] = useState({});
   const [newEvent, setNewEvent] = useState({
     title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '',
     accessories_req: '', guests_req: '', gifts_req: '', prizes_req: ''
   });
+  
+  // Feedback Viewing State
+  const [viewFeedbackEventId, setViewFeedbackEventId] = useState(null);
+  const [eventFeedback, setEventFeedback] = useState([]);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -34,6 +38,22 @@ const AdminDashboard = () => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewFeedback = async (eventId) => {
+    setViewFeedbackEventId(eventId);
+    setLoadingFeedback(true);
+    setEventFeedback([]);
+    try {
+      const response = await axios.get(`${baseURL}/api/admin/events/${eventId}/feedback`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setEventFeedback(response.data);
+    } catch (err) {
+      alert(`Error fetching feedback: ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setLoadingFeedback(false);
     }
   };
 
@@ -436,10 +456,15 @@ const AdminDashboard = () => {
                 {/* GENERAL ANALYTICS (All Roles) */}
                 <div style={{ background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                   <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--secondary)' }}>Performance Analytics</p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
                     <span>👥 Registrations: {event.registered_count} / {event.capacity}</span>
                     <span>📈 Feedback: {event.feedback_count}</span>
                   </div>
+                  {event.feedback_count > 0 && (
+                    <button onClick={() => handleViewFeedback(event.id)} className="btn-secondary" style={{ width: '100%', fontSize: '0.8rem', padding: '0.25rem' }}>
+                      🔍 View AI Feedback Analysis
+                    </button>
+                  )}
                 </div>
 
                 <div style={{ marginTop: 'auto' }}>
@@ -600,6 +625,42 @@ const AdminDashboard = () => {
         )}
       </div>
       )}
+      {/* Feedback Viewing Modal */}
+      {viewFeedbackEventId && (
+        <div style={{ 
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
+          backgroundColor: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 
+        }}>
+          <div className="glass-card animate-fade-in" style={{ padding: '2rem', width: '100%', maxWidth: '600px', maxHeight: '80vh', overflowY: 'auto', background: 'rgba(255,255,255,0.95)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.5rem', color: 'var(--primary)' }}>AI Sentiment Analysis & Feedback</h3>
+              <button onClick={() => setViewFeedbackEventId(null)} className="btn-secondary" style={{ padding: '0.25rem 0.5rem' }}>Close</button>
+            </div>
+            
+            {loadingFeedback ? (
+              <p>Loading AI Analysis...</p>
+            ) : eventFeedback.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)' }}>No feedback submitted yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {eventFeedback.map(fb => (
+                  <div key={fb.id} style={{ padding: '1rem', background: 'white', borderRadius: '8px', borderLeft: `4px solid ${fb.sentiment === 'Positive' ? '#10b981' : fb.sentiment === 'Negative' ? '#dc2626' : '#f59e0b'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                      <span style={{ fontWeight: 'bold' }}>Rating: {fb.rating}/5</span>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: fb.sentiment === 'Positive' ? '#10b981' : fb.sentiment === 'Negative' ? '#dc2626' : '#f59e0b' }}>
+                        AI Tag: {fb.sentiment}
+                      </span>
+                    </div>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>"{fb.comment}"</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
