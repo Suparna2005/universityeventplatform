@@ -35,7 +35,8 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
             "gifts_req": e.gifts_req,
             "prizes_req": e.prizes_req,
             "registered_count": len(e.registrations),
-            "attendance_file_url": e.attendance_file_url
+            "attendance_file_url": e.attendance_file_url,
+            "certificate_template_url": e.certificate_template_url
         })
         
     return result

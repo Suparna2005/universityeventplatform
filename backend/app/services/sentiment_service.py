@@ -1,22 +1,35 @@
+from transformers import pipeline
+import os
+
+# Initialize the pipeline globally so it stays in memory after the first load
+# This will download the model to the local machine on the very first run
+print("Loading Hugging Face Deep Learning NLP Model... (This may take a moment)")
+sentiment_pipeline = pipeline(
+    "sentiment-analysis", 
+    model="distilbert-base-uncased-finetuned-sst-2-english"
+)
+print("NLP Model Loaded Successfully!")
+
 def analyze_sentiment(text: str) -> str:
     """
-    A lightweight, heuristic-based sentiment analyzer for V1.
-    Analyzes feedback text and returns 'Positive', 'Negative', or 'Neutral'.
+    A Deep Learning Neural Network sentiment analyzer.
+    Uses Hugging Face Transformers (DistilBERT) to analyze complex sentence structures.
     """
     if not text:
         return "Neutral"
         
-    text = text.lower()
-    
-    positive_words = ["great", "awesome", "excellent", "good", "amazing", "loved", "fun", "informative", "best", "perfect", "enjoyed"]
-    negative_words = ["bad", "terrible", "awful", "boring", "waste", "poor", "disappointing", "worst", "unorganized", "hate"]
-    
-    pos_score = sum(1 for word in positive_words if word in text)
-    neg_score = sum(1 for word in negative_words if word in text)
-    
-    if pos_score > neg_score:
-        return "Positive"
-    elif neg_score > pos_score:
-        return "Negative"
-    else:
+    try:
+        # The neural network returns a list with a dict, e.g., [{'label': 'POSITIVE', 'score': 0.99}]
+        result = sentiment_pipeline(text)
+        label = result[0]['label']
+        
+        # Convert model's UPPERCASE labels to our system's Title Case labels
+        if label == "POSITIVE":
+            return "Positive"
+        elif label == "NEGATIVE":
+            return "Negative"
+        else:
+            return "Neutral"
+    except Exception as e:
+        print(f"Deep Learning Error: {e}")
         return "Neutral"
