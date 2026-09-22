@@ -1,0 +1,71 @@
+Traceback (most recent call last):
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\sqltypes.py", line 1609, in _object_value_for_elem
+    return self._object_lookup[elem]
+KeyError: 'mentor'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 148, in simple_response
+    await self.app(scope, receive, send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\routing.py", line 756, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\routing.py", line 776, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\routing.py", line 297, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\routing.py", line 77, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\_exception_handler.py", line 64, in wrapped_app
+    raise exc
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\routing.py", line 72, in app
+    response = await func(request)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\fastapi\routing.py", line 278, in app
+    raw_response = await run_endpoint_function(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\fastapi\routing.py", line 193, in run_endpoint_function
+    return await run_in_threadpool(dependant.call, **values)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\concurrency.py", line 42, in run_in_threadpool
+    return await anyio.to_thread.run_sync(func, *args)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\to_thread.py", line 63, in run_sync
+    return await get_async_backend().run_sync_in_worker_thread(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\_backends\_asyncio.py", line 2502, in run_sync_in_worker_thread
+    return await future
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
+    result = context.run(func, *args)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\auth.py", line 17, in login
+    user = db.query(User).filter(User.email == request.email).first()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\query.py", line 2728, in first
+    return self.limit(1)._iter().first()  # type: ignore
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 1786, in first
+    return self._only_one_row(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 749, in _only_one_row
+    row: Optional[_InterimRowType[Any]] = onerow(hard_close=True)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 1673, in _fetchone_impl
+    return self._real_result._fetchone_impl(hard_close=hard_close)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 2259, in _fetchone_impl
+    row = next(self.iterator, _NO_ROW)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\loading.py", line 219, in chunks
+    fetch = cursor._raw_all_rows()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 541, in _raw_all_rows
+    return [make_row(row) for row in rows]
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 541, in <listcomp>
+    return [make_row(row) for row in rows]
+  File "lib\\sqlalchemy\\cyextension\\resultproxy.pyx", line 22, in sqlalchemy.cyextension.resultproxy.BaseRow.__init__
+  File "lib\\sqlalchemy\\cyextension\\resultproxy.pyx", line 79, in sqlalchemy.cyextension.resultproxy._apply_processors
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\sqltypes.py", line 1729, in process
+    value = self._object_value_for_elem(value)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\sqltypes.py", line 1611, in _object_value_for_elem
+    raise LookupError(
+LookupError: 'mentor' is not among the defined enum values. Enum name: roleenum. Possible values: admin, coordinator, student, finance

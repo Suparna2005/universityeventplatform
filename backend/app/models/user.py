@@ -5,11 +5,10 @@ from datetime import datetime
 from app.models.base import Base
 
 class RoleEnum(str, enum.Enum):
-    student = "student"
-    coordinator = "coordinator"
-    mentor = "mentor"
-    finance = "finance"
     admin = "admin"
+    coordinator = "coordinator"
+    student = "student"
+    finance = "finance"
 
 class User(Base):
     __tablename__ = "users"

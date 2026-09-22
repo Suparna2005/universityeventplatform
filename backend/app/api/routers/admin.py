@@ -8,38 +8,46 @@ from app.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-@router.get("/events")
+@router.get("/programs")
 def get_admin_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.finance, RoleEnum.mentor]:
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.finance]:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
-    events = db.query(Event).all()
-    
-    result = []
-    for e in events:
-        feedbacks = db.query(Feedback).filter(Feedback.event_id == e.id).all()
-        positive_count = sum(1 for f in feedbacks if f.sentiment_score == "Positive")
+    try:
+        events = db.query(Event).all()
         
-        result.append({
-            "id": e.id,
-            "title": e.title,
-            "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
-            "date": e.date,
-            "end_date": e.end_date,
-            "feedback_count": len(feedbacks),
-            "positive_feedback_count": positive_count,
-            "capacity": e.capacity,
-            "budget": e.budget,
-            "accessories_req": e.accessories_req,
-            "guests_req": e.guests_req,
-            "gifts_req": e.gifts_req,
-            "prizes_req": e.prizes_req,
-            "registered_count": len(e.registrations),
-            "attendance_file_url": e.attendance_file_url,
-            "certificate_template_url": e.certificate_template_url
-        })
-        
-    return result
+        result = []
+        for e in events:
+            feedbacks = db.query(Feedback).filter(Feedback.event_id == e.id).all()
+            positive_count = sum(1 for f in feedbacks if f.sentiment_score == "Positive")
+            
+            result.append({
+                "id": e.id,
+                "title": e.title,
+                "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
+                "date": e.date,
+                "end_date": e.end_date,
+                "feedback_count": len(feedbacks),
+                "positive_feedback_count": positive_count,
+                "capacity": e.capacity,
+                "budget": e.budget,
+                "club_name": e.club.name if e.club else "University",
+                "accessories_req": e.accessories_req,
+                "guests_req": e.guests_req,
+                "gifts_req": e.gifts_req,
+                "prizes_req": e.prizes_req,
+                "registered_count": len(e.registrations),
+                "attendance_file_url": e.attendance_file_url,
+                "certificate_template_url": e.certificate_template_url,
+                "rejection_reason": getattr(e, "rejection_reason", None),
+                "actual_expenses": getattr(e, "actual_expenses", None)
+            })
+            
+        return result
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=f"Error in get_admin_events: {str(e)}\n\nTraceback: {error_details}")
 
 @router.get("/events/{event_id}/feedback")
 def get_event_feedback(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -93,25 +101,26 @@ def upload_attendance_file(event_id: int, file: UploadFile = File(...), current_
     # Parse CSV for Student Number and Rank
     if ext.lower() == 'csv':
         try:
-            content_str = content.decode('utf-8')
+            content_str = content.decode('utf-8-sig')
             csv_reader = csv.DictReader(StringIO(content_str))
             
             from app.models.user import Student
             for row in csv_reader:
+                # Handle possible whitespace in keys/values
                 student_num = row.get("Student Number", "").strip()
                 rank = row.get("Rank", "Participation").strip()
                 
                 if student_num:
-                    # Find student
                     student = db.query(Student).filter(Student.student_number == student_num).first()
                     if student:
-                        # Find their registration
                         reg = db.query(Registration).filter(
                             Registration.event_id == event_id,
                             Registration.student_id == student.id
                         ).first()
                         if reg:
                             reg.rank = rank if rank else "Participation"
+                            
+            db.commit() # Commit inside try block so errors roll back safely
                             
         except Exception as e:
             # We save the file regardless of parsing errors, but we can log it
@@ -193,16 +202,7 @@ def generate_ai_template(event_id: int, request: AIPromptRequest, current_user: 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to communicate with Pollinations AI: {str(e)}")
 
-@router.put("/events/{event_id}/approve-mentor-initial")
-def approve_mentor_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if event.state != EventState.pending_mentor_initial:
-        raise HTTPException(status_code=400, detail="Event is not pending initial mentor approval")
-    event.state = EventState.pending_admin_initial
-    db.commit()
-    return {"message": "Sent to Admin Panel"}
+
 
 @router.put("/events/{event_id}/approve-admin-initial")
 def approve_admin_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -233,20 +233,9 @@ def approve_admin_final(event_id: int, current_user: User = Depends(get_current_
     event = db.query(Event).filter(Event.id == event_id).first()
     if event.state != EventState.pending_admin_final:
         raise HTTPException(status_code=400, detail="Event is not pending final admin approval")
-    event.state = EventState.pending_mentor_final
-    db.commit()
-    return {"message": "Final admin approval given, sent to Mentor"}
-
-@router.put("/events/{event_id}/approve-mentor-final")
-def approve_mentor_final(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if event.state != EventState.pending_mentor_final:
-        raise HTTPException(status_code=400, detail="Event is not pending final mentor approval")
     event.state = EventState.pending_coordinator_publish
     db.commit()
-    return {"message": "Approval sent to Coordinator"}
+    return {"message": "Final admin approval given, sent to Coordinator"}
 
 @router.put("/events/{event_id}/publish")
 def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -259,8 +248,13 @@ def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_
     db.commit()
     return {"message": "Event published to students!"}
 
+from pydantic import BaseModel
+
+class ExpenseReport(BaseModel):
+    actual_expenses: int
+
 @router.put("/events/{event_id}/close")
-def close_event(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def close_event(event_id: int, report: ExpenseReport, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
         raise HTTPException(status_code=403, detail="Only coordinators or admins can close events")
         
@@ -268,17 +262,31 @@ def close_event(event_id: int, current_user: User = Depends(get_current_user), d
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
         
-    if event.state != EventState.published:
+    if event.state not in [EventState.published, EventState.pending_completion]:
         raise HTTPException(status_code=400, detail="Only published/running events can be closed")
+        
+    event.actual_expenses = report.actual_expenses
+    event.state = EventState.finance_review
+    db.commit()
+    return {"message": "Event closed and expense report submitted to Finance."}
+
+@router.put("/events/{event_id}/verify-expenses")
+def verify_expenses(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.finance:
+        raise HTTPException(status_code=403, detail="Only Finance can verify expenses")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if event.state != EventState.finance_review:
+        raise HTTPException(status_code=400, detail="Event is not pending finance expense review")
         
     event.state = EventState.pending_completion
     db.commit()
-    return {"message": "Event closed successfully. Sent to Mentor for final approval."}
+    return {"message": "Expenses verified, sent to Admin for final completion."}
 
 @router.put("/events/{event_id}/approve-completion")
 def approve_completion(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.mentor]:
-        raise HTTPException(status_code=403, detail="Only mentors can approve event completion")
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only admins can approve event completion")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -290,6 +298,37 @@ def approve_completion(event_id: int, current_user: User = Depends(get_current_u
     event.state = EventState.completed
     db.commit()
     return {"message": "Event completion approved!"}
+
+class RejectionReason(BaseModel):
+    reason: str
+
+@router.put("/events/{event_id}/request-changes")
+def request_changes(event_id: int, payload: RejectionReason, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    event.rejection_reason = payload.reason
+    event.state = EventState.pending_admin_initial  # Reset back to coordinator draft
+    db.commit()
+    return {"message": "Changes requested. Event sent back to Coordinator."}
+
+@router.put("/events/{event_id}/reject")
+def reject_event(event_id: int, payload: RejectionReason, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    event.rejection_reason = payload.reason
+    event.state = EventState.rejected
+    db.commit()
+    return {"message": "Event permanently rejected."}
 
 @router.get("/events/{event_id}/export")
 def export_registrations(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -333,3 +372,42 @@ def export_registrations(event_id: int, current_user: User = Depends(get_current
         media_type="text/csv", 
         headers={"Content-Disposition": f"attachment; filename=attendance_report_{event_id}.csv"}
     )
+
+@router.get("/ai-recommend-requirements")
+def recommend_requirements(title: str = "", description: str = "", req_type: str = ""):
+    text = (title + " " + description).lower()
+    recommendations = []
+    
+    # Heuristic AI matching algorithm based on keywords
+    if req_type == "accessories":
+        if any(word in text for word in ["code", "hackathon", "software", "tech", "robot", "computer"]):
+            recommendations.extend(["Extension cords", "Multi-plugs", "High-speed WiFi routers", "Whiteboards & Markers"])
+        if any(word in text for word in ["dance", "music", "cultural", "singing", "band"]):
+            recommendations.extend(["High-bass Speakers", "Microphones", "Stage Lighting", "Smoke Machine"])
+        if any(word in text for word in ["sports", "cricket", "football", "athlete"]):
+            recommendations.extend(["First-aid kits", "Water dispensers", "Scoreboards", "Whistles"])
+        if not recommendations:
+            recommendations.extend(["Chairs & Tables", "Projector", "Sound System", "Microphone"])
+            
+    elif req_type == "guests":
+        if any(word in text for word in ["code", "hackathon", "software", "tech"]):
+            recommendations.extend(["Senior Software Engineer", "Tech Startup Founder", "Computer Science Professor"])
+        if any(word in text for word in ["business", "startup", "entrepreneur", "finance"]):
+            recommendations.extend(["Venture Capitalist", "CEO of local startup", "Economics Professor"])
+        if not recommendations:
+            recommendations.extend(["University Dean", "Local Industry Expert", "Alumni Speaker"])
+            
+    elif req_type == "gifts":
+        if any(word in text for word in ["code", "hackathon", "software", "tech"]):
+            recommendations.extend(["Mechanical Keyboards", "Tech Company Swag (T-shirts)", "1-Year Cloud Subscriptions"])
+        if not recommendations:
+            recommendations.extend(["University Branded Mugs", "Custom Pens", "Notebooks", "Bouquet of Flowers"])
+            
+    elif req_type == "prizes":
+        if any(word in text for word in ["competition", "hackathon", "tournament", "contest"]):
+            recommendations.extend(["1st Place: ₹5000 Cash", "2nd Place: Smartwatch", "3rd Place: Bluetooth Earbuds"])
+        if not recommendations:
+            recommendations.extend(["Certificates of Excellence", "Medals", "Trophies"])
+
+    # Format output
+    return {"recommendation": ", ".join(recommendations)}

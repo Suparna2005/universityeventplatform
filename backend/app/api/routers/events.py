@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.event import Event, EventState, Registration, RegistrationStatus
+from app.models.user import User, RoleEnum, Club
 from app.schemas.events import EventCreate
-from app.models.user import User, RoleEnum
 from app.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -32,6 +32,7 @@ def list_events(db: Session = Depends(get_db)):
             Registration.status != RegistrationStatus.cancelled
         ).count(),
         "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
+        "club_name": e.club.name if e.club else "University",
     } for e in events]
 
 @router.post("")
@@ -65,7 +66,7 @@ def create_event(
             gifts_req=event.gifts_req,
             prizes_req=event.prizes_req,
             club_id=event.club_id,
-            state=EventState.pending_mentor_initial  # First goes to mentor
+            state=EventState.pending_admin_initial  # Send straight to admin
         )
         db.add(new_event)
         db.commit()
@@ -77,13 +78,51 @@ def create_event(
         error_msg = str(e)
         raise HTTPException(status_code=500, detail=f"DB Error: {error_msg}")
 
+@router.put("/{event_id}")
+def update_event(
+    event_id: int,
+    event_data: EventCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Only coordinators or admins can edit programs")
+        
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    # Optional: you could restrict editing to only certain states if desired
+    # if event.state not in [EventState.pending_mentor_initial, EventState.pending_admin_initial]:
+    #     raise HTTPException(status_code=400, detail="Event cannot be edited at this stage")
+
+    try:
+        event.title = event_data.title
+        event.description = event_data.description
+        event.date = event_data.date
+        event.end_date = event_data.end_date
+        event.location = event_data.location
+        event.capacity = event_data.capacity
+        event.budget = event_data.budget
+        event.accessories_req = event_data.accessories_req
+        event.guests_req = event_data.guests_req
+        event.gifts_req = event_data.gifts_req
+        event.prizes_req = event_data.prizes_req
+        event.club_id = event_data.club_id
+        
+        db.commit()
+        return {"message": "Event updated successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"DB Error: {str(e)}")
+
 @router.delete("/{event_id}")
 def delete_event(
     event_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.mentor]:
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
         raise HTTPException(status_code=403, detail="Not authorized to delete events")
         
     event = db.query(Event).filter(Event.id == event_id).first()

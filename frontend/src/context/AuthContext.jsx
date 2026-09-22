@@ -6,7 +6,7 @@ export const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const baseURL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000');
+  const baseURL = '';
 
   useEffect(() => {
     const checkLoggedIn = async () => {
@@ -46,6 +46,24 @@ export const AuthProvider = ({ children }) => {
     setUser(userRes.data);
   };
 
+  const register = async (name, email, password, studentNumber, department, semester) => {
+    const response = await axios.post(`${baseURL}/api/auth/register`, {
+      name,
+      email,
+      password,
+      student_number: studentNumber,
+      department,
+      semester
+    });
+    const token = response.data.access_token;
+    localStorage.setItem('token', token);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    
+    // Fetch profile
+    const profileResponse = await axios.get(`${baseURL}/api/auth/me`);
+    setUser(profileResponse.data);
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
@@ -53,7 +71,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, baseURL }}>
       {!loading && children}
     </AuthContext.Provider>
   );

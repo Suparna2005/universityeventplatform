@@ -2,6 +2,7 @@ import React, { useContext } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import Login from './pages/public/Login';
+import Signup from './pages/public/Signup';
 import Dashboard from './pages/student/Dashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Profile from './pages/Profile';
@@ -28,6 +29,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to={getHomeRoute()} /> : <Login />} />
+      <Route path="/signup" element={user ? <Navigate to={getHomeRoute()} /> : <Signup />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
       <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
       <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'mentor']}><AdminDashboard /></ProtectedRoute>} />

@@ -5,19 +5,21 @@ from datetime import datetime
 from app.models.base import Base
 
 class EventState(str, enum.Enum):
-    pending_mentor_initial = "pending_mentor_initial"
     pending_admin_initial = "pending_admin_initial"
     pending_finance = "pending_finance"
     pending_admin_final = "pending_admin_final"
-    pending_mentor_final = "pending_mentor_final"
     pending_coordinator_publish = "pending_coordinator_publish"
     published = "published"
     registration_closed = "registration_closed"
     in_progress = "in_progress"
     pending_completion = "pending_completion"
     completed = "completed"
-    cancelled = "cancelled"
-    finance_review = "finance_review"  # legacy state
+    finance_review = "finance_review"
+    # Legacy states to prevent SQLAlchemy from crashing on old database rows
+    draft = "draft"
+    pending_approval = "pending_approval"
+    approved = "approved"
+    rejected = "rejected"
 
 class Event(Base):
     __tablename__ = "events"
@@ -25,6 +27,8 @@ class Event(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True, nullable=False)
     description = Column(Text, nullable=False)
+    rejection_reason = Column(String, nullable=True)
+    actual_expenses = Column(Integer, nullable=True)
     date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
     location = Column(String, nullable=False)
@@ -37,7 +41,7 @@ class Event(Base):
     gifts_req = Column(Text, nullable=True)
     prizes_req = Column(Text, nullable=True)
 
-    state = Column(Enum(EventState), default=EventState.pending_mentor_initial, nullable=False)
+    state = Column(Enum(EventState, native_enum=False), default=EventState.pending_admin_initial, nullable=False)
     attendance_file_url = Column(String, nullable=True)
     certificate_template_url = Column(String, nullable=True)
     

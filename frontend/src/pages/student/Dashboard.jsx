@@ -12,9 +12,11 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [qrModal, setQrModal] = useState({ isOpen: false, imageUrl: null });
   const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, eventId: null, rating: 5, comment: '' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterClub, setFilterClub] = useState('');
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
-  const baseURL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000');
+  const baseURL = '';
 
   const fetchData = async () => {
     try {
@@ -159,6 +161,9 @@ const Dashboard = () => {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '2rem' }}>
               {recommendations.map(rec => (
                 <div key={rec.id} className="glass-card" style={{ padding: '2rem', border: '2px solid var(--secondary)' }}>
+                  <span className="badge badge-warning" style={{ marginBottom: '0.5rem', display: 'inline-block', background: 'var(--primary)', color: 'white', fontSize: '0.75rem' }}>
+                    Hosted by {rec.club_name}
+                  </span>
                   <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{rec.title}</h3>
                   <p style={{ color: 'var(--text-muted)' }}>{rec.description}</p>
                   <div style={{ marginTop: '1.5rem' }}>
@@ -174,17 +179,50 @@ const Dashboard = () => {
 
         <h2 style={{ marginBottom: '2rem', fontSize: '2rem' }}>Upcoming Discoveries</h2>
         
+        {/* Search and Filter UI */}
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <input 
+            type="text" 
+            placeholder="Search events by title or description..." 
+            value={searchQuery} 
+            onChange={e => setSearchQuery(e.target.value)} 
+            className="input-glass"
+            style={{ flex: '1 1 300px' }}
+          />
+          <select 
+            value={filterClub} 
+            onChange={e => setFilterClub(e.target.value)} 
+            className="input-glass"
+            style={{ flex: '0 1 200px' }}
+          >
+            <option value="">All Clubs / Hosts</option>
+            {[...new Set(events.map(e => e.club_name))].map(club => (
+              <option key={club} value={club}>{club}</option>
+            ))}
+          </select>
+        </div>
+
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem' }}>Loading experiences...</div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '2rem' }}>
-            {events.map(event => (
+            {events.filter(event => {
+              const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                    event.description.toLowerCase().includes(searchQuery.toLowerCase());
+              const matchesClub = filterClub ? event.club_name === filterClub : true;
+              return matchesSearch && matchesClub;
+            }).map(event => (
               <div key={event.id} className="glass-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', height: '100%' }}>
                 
                 <div style={{ marginBottom: '1rem' }}>
-                  <span className="badge badge-warning" style={{ marginBottom: '1rem', display: 'inline-block' }}>
-                    {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                  </span>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+                    <span className="badge badge-warning">
+                      {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className="badge badge-secondary" style={{ background: '#f1f5f9', color: 'var(--primary)' }}>
+                      Host: {event.club_name}
+                    </span>
+                  </div>
                   <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{event.title}</h3>
                   <p style={{ color: 'var(--text-muted)', lineHeight: '1.5' }}>{event.description}</p>
                 </div>

@@ -90,6 +90,7 @@ def get_my_recommendations(current_user: User = Depends(get_current_user), db: S
             "description": r["event"].description,
             "date": r["event"].date,
             "location": r["event"].location,
+            "club_name": r["event"].club.name if r["event"].club else "University",
             "score": r["score"]
         } for r in recs
     ]

@@ -24,6 +24,15 @@ try:
 except Exception:
     pass
 
+from fastapi.responses import JSONResponse
+from fastapi.requests import Request
+
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    with open("backend_error.log", "w") as f:
+        f.write(traceback.format_exc())
+    return JSONResponse(status_code=500, content={"detail": str(exc), "traceback": traceback.format_exc()})
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -84,7 +93,43 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
     except Exception as e:
         print(f"Table creation warning: {e}")
-        
+
+    # Patch Postgres/Supabase database missing columns
+    if not settings.DATABASE_URL.startswith("sqlite:///"):
+        try:
+            with engine.connect() as conn:
+                queries = [
+                    "ALTER TABLE events ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
+                    "ALTER TABLE events ADD COLUMN budget INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE events ADD COLUMN attendance_file_url TEXT",
+                    "ALTER TABLE events ADD COLUMN certificate_template_url TEXT",
+                    "ALTER TABLE events ADD COLUMN accessories_req TEXT",
+                    "ALTER TABLE events ADD COLUMN guests_req TEXT",
+                    "ALTER TABLE events ADD COLUMN gifts_req TEXT",
+                    "ALTER TABLE events ADD COLUMN prizes_req TEXT",
+                    "ALTER TABLE events ADD COLUMN end_date TIMESTAMP",
+                    "ALTER TABLE users ADD COLUMN profile_picture TEXT",
+                    "ALTER TABLE users ADD COLUMN bio TEXT",
+                    "ALTER TABLE users ADD COLUMN phone_number TEXT",
+                    "ALTER TABLE users ADD COLUMN department TEXT",
+                    "ALTER TABLE users ADD COLUMN gender TEXT",
+                    "ALTER TABLE budgets ADD COLUMN proposed_amount REAL",
+                    "ALTER TABLE budgets ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+                    "ALTER TABLE budgets ADD COLUMN proposed_by_id INTEGER",
+                    "ALTER TABLE budgets ADD COLUMN approved_by_id INTEGER",
+                    "ALTER TABLE registrations ADD COLUMN rank TEXT",
+                    "ALTER TABLE certificates ADD COLUMN rank TEXT DEFAULT 'Participation'",
+                    "ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0"
+                ]
+                for q in queries:
+                    try:
+                        conn.execute(text(q))
+                        conn.commit()
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Postgres patch skipped: {e}")
+            
     yield
 
     # Teardown actions
@@ -93,11 +138,12 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     lifespan=lifespan
 )
+app.add_exception_handler(Exception, global_exception_handler)
 
 # CORS configuration for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Typically restricted to frontend URL in production
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -177,8 +223,98 @@ def setup_database():
     except Exception as e:
         return {"error": str(e)}
 
+@app.get("/api/upgrade-db")
+def upgrade_database():
+    results = []
+    try:
+        with engine.connect() as conn:
+            # 1. Add columns
+            try: 
+                conn.execute(text("ALTER TABLE events ADD COLUMN rejection_reason TEXT"))
+                conn.commit()
+                results.append("Successfully added rejection_reason column.")
+            except Exception as e:
+                conn.rollback()
+                results.append(f"Skipped rejection_reason (already exists).")
+                
+            try: 
+                conn.execute(text("ALTER TABLE events ADD COLUMN actual_expenses INTEGER"))
+                conn.commit()
+                results.append("Successfully added actual_expenses column.")
+            except Exception as e:
+                conn.rollback()
+                results.append(f"Skipped actual_expenses (already exists).")
+
+            # 2. Convert ENUM to VARCHAR to permanently prevent ENUM value errors
+            try:
+                with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as auto_conn:
+                    auto_conn.execute(text("ALTER TABLE events ALTER COLUMN state TYPE VARCHAR(255) USING state::text"))
+                results.append("Converted state column from ENUM to VARCHAR successfully.")
+            except Exception as e:
+                results.append(f"Skipped state column conversion (already converted or error).")
+
+        return {"status": "success", "results": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/debug-events")
+def debug_events():
+    try:
+        with engine.connect() as conn:
+            # Query the raw rows from events table
+            result = conn.execute(text("SELECT id, title, state FROM events"))
+            events = [{"id": row[0], "title": row[1], "state": row[2]} for row in result]
+            
+            # Query the enum values in postgres
+            enum_result = conn.execute(text("SELECT enumlabel FROM pg_enum JOIN pg_type ON pg_enum.enumtypid = pg_type.oid WHERE pg_type.typname = 'eventstate'"))
+            enum_values = [row[0] for row in enum_result]
+            
+        return {"events": events, "enum_values": enum_values}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/api/test-create-event")
+def test_create_event():
+    try:
+        from datetime import datetime, timedelta
+        from app.database import SessionLocal
+        from sqlalchemy import text
+        from app.models.event import Event, EventState
+        
+        results = {}
+        with SessionLocal() as db:
+            # 1. Check existing states in DB via raw SQL
+            raw_rs = db.execute(text("SELECT id, title, state FROM events ORDER BY id DESC LIMIT 5"))
+            results['raw_recent_events'] = [dict(row._mapping) for row in raw_rs]
+            
+            # 2. Attempt to create new test event
+            new_event = Event(
+                title="TEST SYSTEM EVENT",
+                description="This is an automated test event.",
+                date=datetime.utcnow() + timedelta(days=5),
+                location="Main Hall",
+                capacity=100,
+                budget=5000,
+                state=EventState.pending_admin_initial
+            )
+            db.add(new_event)
+            db.commit()
+            db.refresh(new_event)
+            
+            results['new_event_id'] = new_event.id
+            
+            # 3. Check states again via raw SQL
+            raw_rs_after = db.execute(text("SELECT id, title, state FROM events ORDER BY id DESC LIMIT 5"))
+            results['raw_recent_events_after'] = [dict(row._mapping) for row in raw_rs_after]
+            
+            return {"status": "success", "data": results}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+
 # Mount routers
 from app.api.routers.events import router as events_router
+from app.api.routers.clubs import router as clubs_router
 from app.api.routers.auth import router as auth_router
 from app.api.routers.registrations import router as registrations_router
 from app.api.routers.tickets import router as tickets_router
@@ -191,6 +327,7 @@ from app.api.routers.finance import router as finance_router
 from app.api.routers.analytics import router as analytics_router
 
 app.include_router(events_router)
+app.include_router(clubs_router)
 app.include_router(auth_router)
 app.include_router(registrations_router)
 app.include_router(tickets_router)
@@ -202,10 +339,3 @@ app.include_router(profile_router)
 app.include_router(finance_router)
 app.include_router(analytics_router)
 
-# Mount static files to serve the certificate templates
-import os
-from fastapi.staticfiles import StaticFiles
-
-# Ensure the directory exists before mounting
-os.makedirs("uploads/certificates", exist_ok=True)
-app.mount("/static/certificates", StaticFiles(directory="uploads/certificates"), name="certificates")
