@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, Enum, DateTime
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, Enum, DateTime, Float
 from sqlalchemy.orm import relationship
 import enum
 from datetime import datetime
@@ -9,6 +9,19 @@ class RoleEnum(str, enum.Enum):
     coordinator = "coordinator"
     student = "student"
     finance = "finance"
+    mentor = "mentor"
+    faculty = "faculty"
+
+class ClubMemberRole(str, enum.Enum):
+    member = "member"
+    core = "core"
+    head = "head"
+    president = "president"
+
+class JoinRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
 
 class User(Base):
     __tablename__ = "users"
@@ -49,5 +62,52 @@ class Club(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     description = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    rating = Column(Float, default=0.0)
+    achievements = Column(String, nullable=True)
+    last_event_date = Column(DateTime, nullable=True)
 
     events = relationship("Event", back_populates="club")
+    memberships = relationship("ClubMembership", back_populates="club")
+    join_requests = relationship("ClubJoinRequest", back_populates="club")
+
+
+class ClubMembership(Base):
+    __tablename__ = "club_memberships"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=False)
+    role = Column(Enum(ClubMemberRole), default=ClubMemberRole.member, nullable=False)
+    club_department = Column(String, nullable=True) # e.g. Design, Technical
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    activity_points = Column(Integer, default=0)
+
+    user = relationship("User")
+    club = relationship("Club", back_populates="memberships")
+
+
+class ClubGallery(Base):
+    __tablename__ = "club_gallery"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=False)
+    image_url = Column(String, nullable=False)
+    caption = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    club = relationship("Club")
+
+
+class ClubJoinRequest(Base):
+    __tablename__ = "club_join_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=False)
+    status = Column(Enum(JoinRequestStatus), default=JoinRequestStatus.pending, nullable=False)
+    message = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    club = relationship("Club", back_populates="join_requests")

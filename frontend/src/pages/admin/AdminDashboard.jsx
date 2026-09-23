@@ -6,6 +6,8 @@ import { Brain, UserCircle, QrCode } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import BudgetDashboard from './BudgetDashboard';
 import AnalyticsDashboard from './AnalyticsDashboard';
+import ClubManagement from './ClubManagement';
+import ClubsDashboard from '../student/ClubsDashboard';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('events'); // legacy tab
@@ -434,6 +436,7 @@ const AdminDashboard = () => {
           category: 'Clubs & Users',
           items: [
             { id: 'admin_clubs_all', label: 'Manage Clubs' },
+            { id: 'admin_clubs_browse', label: 'Browse Clubs Directory' },
             { id: 'admin_users_students', label: 'Manage Users' },
           ]
         },
@@ -483,6 +486,7 @@ const AdminDashboard = () => {
           category: 'Clubs',
           items: [
             { id: 'clubs_manage', label: 'Manage Clubs' },
+            { id: 'admin_clubs_browse', label: 'Browse Clubs Directory' },
           ]
         },
         {
@@ -633,12 +637,22 @@ const AdminDashboard = () => {
           {/* We hide the legacy tabs, but keep them rendering if needed or just use activeTab */}
           
           {/* Show Placeholder for unimplemented sidebar items */}
-          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
+          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
             <div style={{ padding: '4rem', textAlign: 'center', background: 'rgba(255,255,255,0.8)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
               <h2 style={{ color: 'var(--primary)', marginBottom: '1rem', fontSize: '1.5rem' }}>✨ Coming Soon</h2>
               <p style={{ color: '#64748b' }}>The "{menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label}" module is currently under development.</p>
               <button onClick={() => handleSidebarClick('Events', 'events_all')} className="btn-primary" style={{ marginTop: '1.5rem' }}>Return to All Events</button>
             </div>
+          )}
+
+          {/* Club Management View */}
+          {(activeSubMenu === 'admin_clubs_all' || activeSubMenu === 'clubs_manage') && (
+            <ClubManagement />
+          )}
+
+          {/* Club Directory View */}
+          {activeSubMenu === 'admin_clubs_browse' && (
+            <ClubsDashboard />
           )}
 
           {/* Legacy Rendering Logic for implemented views */}

@@ -296,6 +296,13 @@ def approve_completion(event_id: int, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=400, detail="Event is not pending completion approval")
         
     event.state = EventState.completed
+    
+    if event.club_id:
+        from app.models.user import Club
+        club = db.query(Club).filter(Club.id == event.club_id).first()
+        if club:
+            club.last_event_date = event.end_date or event.date
+            
     db.commit()
     return {"message": "Event completion approved!"}
 

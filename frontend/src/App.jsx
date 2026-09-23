@@ -6,6 +6,7 @@ import Signup from './pages/public/Signup';
 import Dashboard from './pages/student/Dashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import Profile from './pages/Profile';
+import ClubsDashboard from './pages/student/ClubsDashboard';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useContext(AuthContext);
@@ -31,8 +32,9 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to={getHomeRoute()} /> : <Login />} />
       <Route path="/signup" element={user ? <Navigate to={getHomeRoute()} /> : <Signup />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
+      <Route path="/clubs" element={user ? <ClubsDashboard /> : <Navigate to="/login" />} />
       <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'mentor']}><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'mentor', 'faculty']}><AdminDashboard /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={getHomeRoute()} replace />} />
     </Routes>
   );

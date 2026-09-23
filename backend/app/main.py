@@ -18,9 +18,11 @@ import os
 is_vercel = bool(os.getenv("VERCEL"))
 UPLOAD_DIR = "/tmp/uploads/profiles" if is_vercel else "uploads/profiles"
 ATTENDANCE_DIR = "/tmp/uploads/attendance" if is_vercel else "uploads/attendance"
+GALLERY_DIR = "/tmp/uploads/gallery" if is_vercel else "uploads/gallery"
 try:
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(ATTENDANCE_DIR, exist_ok=True)
+    os.makedirs(GALLERY_DIR, exist_ok=True)
 except Exception:
     pass
 
@@ -207,11 +209,11 @@ def setup_database():
         
         if db.query(User).count() == 0:
             seed_users = [
-                User(email='admin@example.com', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='admin', is_active=True),
-                User(email='coordinator@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='coordinator', is_active=True),
-                User(email='finance@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='finance', is_active=True),
-                User(email='mentor@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='mentor', is_active=True),
-                User(email='student001@test.edu', password_hash='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='student', is_active=True)
+                User(email='admin@example.com', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='admin', name='Admin'),
+                User(email='coordinator@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='coordinator', name='Coordinator'),
+                User(email='finance@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='finance', name='Finance Dept'),
+                User(email='mentor@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='mentor', name='Mentor'),
+                User(email='student001@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='student', name='Test Student')
             ]
             db.add_all(seed_users)
             db.commit()
@@ -245,6 +247,30 @@ def upgrade_database():
                 conn.rollback()
                 results.append(f"Skipped actual_expenses (already exists).")
 
+            try:
+                conn.execute(text("ALTER TABLE club_memberships ADD COLUMN activity_points INTEGER DEFAULT 0"))
+                conn.commit()
+                results.append("Successfully added activity_points column to club_memberships.")
+            except Exception as e:
+                conn.rollback()
+                results.append("Skipped activity_points (already exists).")
+                
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS club_gallery (
+                        id SERIAL PRIMARY KEY,
+                        club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                        image_url VARCHAR NOT NULL,
+                        caption VARCHAR,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.commit()
+                results.append("Successfully created club_gallery table.")
+            except Exception as e:
+                conn.rollback()
+                results.append(f"Error creating club_gallery: {str(e)}")
+
             # 2. Convert ENUM to VARCHAR to permanently prevent ENUM value errors
             try:
                 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as auto_conn:
@@ -253,9 +279,98 @@ def upgrade_database():
             except Exception as e:
                 results.append(f"Skipped state column conversion (already converted or error).")
 
+            try:
+                with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as auto_conn:
+                    auto_conn.execute(text("ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(255) USING role::text"))
+                results.append("Converted users.role column from ENUM to VARCHAR successfully.")
+            except Exception as e:
+                pass
+
         return {"status": "success", "results": results}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/seed-clubs")
+def seed_clubs():
+    results = []
+    try:
+        # First ensure new tables exist
+        Base.metadata.create_all(bind=engine)
+        results.append("Created tables if not exist.")
+        
+        # Add new columns to clubs
+        with engine.connect() as conn:
+            try:
+                conn.execute(text("ALTER TABLE clubs ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            try:
+                conn.execute(text("ALTER TABLE clubs ADD COLUMN rating FLOAT DEFAULT 0.0"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            try:
+                conn.execute(text("ALTER TABLE clubs ADD COLUMN achievements VARCHAR"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            try:
+                conn.execute(text("ALTER TABLE clubs ADD COLUMN last_event_date TIMESTAMP"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                
+            try:
+                conn.execute(text("ALTER TABLE club_memberships ADD COLUMN activity_points INTEGER DEFAULT 0"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS club_gallery (
+                        id SERIAL PRIMARY KEY,
+                        club_id INTEGER NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+                        image_url VARCHAR NOT NULL,
+                        caption VARCHAR,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
+        results.append("Altered tables (ignored if exists).")
+        
+        # Seed 10 clubs
+        from app.database import SessionLocal
+        from app.models.user import Club
+        with SessionLocal() as db:
+            club_names = [
+                "Tech Innovators Club",
+                "Robotics & Automation Society",
+                "Cultural & Arts Association",
+                "Music & Dance Club",
+                "Sports & Athletics Club",
+                "Entrepreneurship Cell",
+                "Literature & Debate Society",
+                "Photography & Media Club",
+                "Environmental & Green Club",
+                "Coding & Hackathon Club"
+            ]
+            added_count = 0
+            for name in club_names:
+                if not db.query(Club).filter(Club.name == name).first():
+                    db.add(Club(name=name, description=f"The official {name} of the university."))
+                    added_count += 1
+            db.commit()
+            results.append(f"Seeded {added_count} clubs.")
+            
+        return {"status": "success", "results": results}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 
 @app.get("/api/debug-events")
 def debug_events():
@@ -339,3 +454,9 @@ app.include_router(profile_router)
 app.include_router(finance_router)
 app.include_router(analytics_router)
 
+# Serve static files
+try:
+    if not is_vercel:
+        app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+except Exception:
+    pass

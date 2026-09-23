@@ -1,7 +1,12 @@
 Traceback (most recent call last):
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\sqltypes.py", line 1609, in _object_value_for_elem
-    return self._object_lookup[elem]
-KeyError: 'mentor'
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.UndefinedColumn: column club_memberships.activity_points does not exist
+LINE 1: ...berships.joined_at AS club_memberships_joined_at, club_membe...
+                                                             ^
+
 
 The above exception was the direct cause of the following exception:
 
@@ -44,28 +49,76 @@ Traceback (most recent call last):
     return await future
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
     result = context.run(func, *args)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\auth.py", line 17, in login
-    user = db.query(User).filter(User.email == request.email).first()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\query.py", line 2728, in first
-    return self.limit(1)._iter().first()  # type: ignore
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 1786, in first
-    return self._only_one_row(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 749, in _only_one_row
-    row: Optional[_InterimRowType[Any]] = onerow(hard_close=True)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 1673, in _fetchone_impl
-    return self._real_result._fetchone_impl(hard_close=hard_close)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 2259, in _fetchone_impl
-    row = next(self.iterator, _NO_ROW)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\loading.py", line 219, in chunks
-    fetch = cursor._raw_all_rows()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 541, in _raw_all_rows
-    return [make_row(row) for row in rows]
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\result.py", line 541, in <listcomp>
-    return [make_row(row) for row in rows]
-  File "lib\\sqlalchemy\\cyextension\\resultproxy.pyx", line 22, in sqlalchemy.cyextension.resultproxy.BaseRow.__init__
-  File "lib\\sqlalchemy\\cyextension\\resultproxy.pyx", line 79, in sqlalchemy.cyextension.resultproxy._apply_processors
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\sqltypes.py", line 1729, in process
-    value = self._object_value_for_elem(value)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\sqltypes.py", line 1611, in _object_value_for_elem
-    raise LookupError(
-LookupError: 'mentor' is not among the defined enum values. Enum name: roleenum. Possible values: admin, coordinator, student, finance
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\clubs.py", line 74, in delete_club
+    db.commit()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2017, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1302, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1277, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4341, in flush
+    self._flush(objects)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4477, in _flush
+    transaction.rollback(_capture_exception=True)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4437, in _flush
+    flush_context.execute()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 442, in execute
+    postsort_actions = self._generate_actions()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 400, in _generate_actions
+    if action.execute(self):
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 532, in execute
+    self.dependency_processor.presort_deletes(uow, delete_states)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\dependency.py", line 450, in presort_deletes
+    history = uowcommit.get_attribute_history(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 283, in get_attribute_history
+    history = impl.get_history(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\attributes.py", line 1679, in get_history
+    current = self.get(state, dict_, passive=passive)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\attributes.py", line 1086, in get
+    value = self._fire_loader_callables(state, key, passive)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\attributes.py", line 1121, in _fire_loader_callables
+    return self.callable_(state, passive)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\strategies.py", line 967, in _load_for_state
+    return self._emit_lazyload(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\strategies.py", line 1130, in _emit_lazyload
+    result = session.execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2351, in execute
+    return self._execute_internal(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2236, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\context.py", line 293, in orm_execute_statement
+    result = conn.execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1418, in execute
+    return meth(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\elements.py", line 515, in _execute_on_connection
+    return connection._execute_clauseelement(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1640, in _execute_clauseelement
+    ret = self._execute_context(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 2353, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column club_memberships.activity_points does not exist
+LINE 1: ...berships.joined_at AS club_memberships_joined_at, club_membe...
+                                                             ^
+
+[SQL: SELECT club_memberships.id AS club_memberships_id, club_memberships.user_id AS club_memberships_user_id, club_memberships.club_id AS club_memberships_club_id, club_memberships.role AS club_memberships_role, club_memberships.club_department AS club_memberships_club_department, club_memberships.joined_at AS club_memberships_joined_at, club_memberships.activity_points AS club_memberships_activity_points 
+FROM club_memberships 
+WHERE %(param_1)s = club_memberships.club_id]
+[parameters: {'param_1': 43}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
