@@ -3,9 +3,9 @@ Traceback (most recent call last):
     self.dialect.do_execute(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
     cursor.execute(statement, parameters)
-psycopg2.errors.UndefinedColumn: column club_memberships.activity_points does not exist
-LINE 1: ...berships.joined_at AS club_memberships_joined_at, club_membe...
-                                                             ^
+psycopg2.errors.InvalidTextRepresentation: invalid input value for enum joinrequeststatus: "pending_admin"
+LINE 3: WHERE club_join_requests.status = 'pending_admin'
+                                          ^
 
 
 The above exception was the direct cause of the following exception:
@@ -13,9 +13,7 @@ The above exception was the direct cause of the following exception:
 Traceback (most recent call last):
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
     await self.app(scope, receive, _send)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
-    await self.simple_response(scope, receive, send, request_headers=headers)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 148, in simple_response
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
     await self.app(scope, receive, send)
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
@@ -49,48 +47,12 @@ Traceback (most recent call last):
     return await future
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
     result = context.run(func, *args)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\clubs.py", line 74, in delete_club
-    db.commit()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2017, in commit
-    trans.commit(_to_root=True)
-  File "<string>", line 2, in commit
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
-    ret_value = fn(self, *arg, **kw)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1302, in commit
-    self._prepare_impl()
-  File "<string>", line 2, in _prepare_impl
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
-    ret_value = fn(self, *arg, **kw)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1277, in _prepare_impl
-    self.session.flush()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4341, in flush
-    self._flush(objects)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4477, in _flush
-    transaction.rollback(_capture_exception=True)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
-    raise exc_value.with_traceback(exc_tb)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4437, in _flush
-    flush_context.execute()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 442, in execute
-    postsort_actions = self._generate_actions()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 400, in _generate_actions
-    if action.execute(self):
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 532, in execute
-    self.dependency_processor.presort_deletes(uow, delete_states)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\dependency.py", line 450, in presort_deletes
-    history = uowcommit.get_attribute_history(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 283, in get_attribute_history
-    history = impl.get_history(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\attributes.py", line 1679, in get_history
-    current = self.get(state, dict_, passive=passive)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\attributes.py", line 1086, in get
-    value = self._fire_loader_callables(state, key, passive)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\attributes.py", line 1121, in _fire_loader_callables
-    return self.callable_(state, passive)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\strategies.py", line 967, in _load_for_state
-    return self._emit_lazyload(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\strategies.py", line 1130, in _emit_lazyload
-    result = session.execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\admin.py", line 125, in get_pending_club_requests
+    requests = db.query(ClubJoinRequest).filter(ClubJoinRequest.status == "pending_admin").all()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\query.py", line 2673, in all
+    return self._iter().all()  # type: ignore
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\query.py", line 2827, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2351, in execute
     return self._execute_internal(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2236, in _execute_internal
@@ -113,12 +75,12 @@ Traceback (most recent call last):
     self.dialect.do_execute(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
     cursor.execute(statement, parameters)
-sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedColumn) column club_memberships.activity_points does not exist
-LINE 1: ...berships.joined_at AS club_memberships_joined_at, club_membe...
-                                                             ^
+sqlalchemy.exc.DataError: (psycopg2.errors.InvalidTextRepresentation) invalid input value for enum joinrequeststatus: "pending_admin"
+LINE 3: WHERE club_join_requests.status = 'pending_admin'
+                                          ^
 
-[SQL: SELECT club_memberships.id AS club_memberships_id, club_memberships.user_id AS club_memberships_user_id, club_memberships.club_id AS club_memberships_club_id, club_memberships.role AS club_memberships_role, club_memberships.club_department AS club_memberships_club_department, club_memberships.joined_at AS club_memberships_joined_at, club_memberships.activity_points AS club_memberships_activity_points 
-FROM club_memberships 
-WHERE %(param_1)s = club_memberships.club_id]
-[parameters: {'param_1': 43}]
-(Background on this error at: https://sqlalche.me/e/20/f405)
+[SQL: SELECT club_join_requests.id AS club_join_requests_id, club_join_requests.user_id AS club_join_requests_user_id, club_join_requests.club_id AS club_join_requests_club_id, club_join_requests.status AS club_join_requests_status, club_join_requests.message AS club_join_requests_message, club_join_requests.created_at AS club_join_requests_created_at 
+FROM club_join_requests 
+WHERE club_join_requests.status = %(status_1)s]
+[parameters: {'status_1': 'pending_admin'}]
+(Background on this error at: https://sqlalche.me/e/20/9h9h)

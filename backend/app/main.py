@@ -59,6 +59,8 @@ async def lifespan(app: FastAPI):
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE users ADD COLUMN gender TEXT")
                 except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE users ADD COLUMN created_by_role TEXT")
+                except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE budgets ADD COLUMN proposed_amount REAL")
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE budgets ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'")
@@ -85,6 +87,10 @@ async def lifespan(app: FastAPI):
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0")
                 except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE clubs ADD COLUMN club_type TEXT DEFAULT 'university'")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE clubs ADD COLUMN department TEXT")
+                except sqlite3.OperationalError: pass
                 conn.commit()
                 conn.close()
             except Exception as e:
@@ -99,7 +105,6 @@ async def lifespan(app: FastAPI):
     # Patch Postgres/Supabase database missing columns
     if not settings.DATABASE_URL.startswith("sqlite:///"):
         try:
-            with engine.connect() as conn:
                 queries = [
                     "ALTER TABLE events ADD COLUMN club_id INTEGER REFERENCES clubs(id)",
                     "ALTER TABLE events ADD COLUMN budget INTEGER NOT NULL DEFAULT 0",
@@ -115,20 +120,25 @@ async def lifespan(app: FastAPI):
                     "ALTER TABLE users ADD COLUMN phone_number TEXT",
                     "ALTER TABLE users ADD COLUMN department TEXT",
                     "ALTER TABLE users ADD COLUMN gender TEXT",
+                    "ALTER TABLE users ADD COLUMN created_by_role TEXT",
                     "ALTER TABLE budgets ADD COLUMN proposed_amount REAL",
                     "ALTER TABLE budgets ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
                     "ALTER TABLE budgets ADD COLUMN proposed_by_id INTEGER",
                     "ALTER TABLE budgets ADD COLUMN approved_by_id INTEGER",
                     "ALTER TABLE registrations ADD COLUMN rank TEXT",
                     "ALTER TABLE certificates ADD COLUMN rank TEXT DEFAULT 'Participation'",
-                    "ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0"
+                    "ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0",
+                    "ALTER TABLE clubs ADD COLUMN club_type VARCHAR(50) DEFAULT 'university'",
+                    "ALTER TABLE clubs ADD COLUMN department TEXT",
+                    "ALTER TYPE roleenum ADD VALUE IF NOT EXISTS 'club_coordinator'",
+                    "ALTER TYPE clubmemberrole ADD VALUE IF NOT EXISTS 'club_coordinator'"
                 ]
-                for q in queries:
-                    try:
-                        conn.execute(text(q))
-                        conn.commit()
-                    except Exception:
-                        pass
+                with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                    for q in queries:
+                        try:
+                            conn.execute(text(q))
+                        except Exception as inner_e:
+                            pass
         except Exception as e:
             print(f"Postgres patch skipped: {e}")
             
@@ -202,18 +212,28 @@ def setup_database():
         # Create all tables
         Base.metadata.create_all(bind=engine)
         
+        if not settings.DATABASE_URL.startswith("sqlite:///"):
+            with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+                try:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN created_by_role TEXT"))
+                except Exception as e:
+                    print(f"Force add column failed: {e}")
+        
         # Insert seed users if they don't exist
         from app.database import SessionLocal
         from app.models.user import User
         db = SessionLocal()
         
         if db.query(User).count() == 0:
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            valid_hash = pwd_context.hash("admin123")
             seed_users = [
-                User(email='admin@example.com', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='admin', name='Admin'),
-                User(email='coordinator@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='coordinator', name='Coordinator'),
-                User(email='finance@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='finance', name='Finance Dept'),
-                User(email='mentor@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='mentor', name='Mentor'),
-                User(email='student001@test.edu', hashed_password='$2b$12$nGX1fUTvC8WGi4HrnLwjKsE1o2Fj7OxISa3PvLiGHT8d9mEmHGbVQayzsFawRHn', role='student', name='Test Student')
+                User(email='admin@example.com', hashed_password=valid_hash, role='admin', name='Admin'),
+                User(email='coordinator@test.edu', hashed_password=valid_hash, role='coordinator', name='Coordinator'),
+                User(email='finance@test.edu', hashed_password=valid_hash, role='finance', name='Finance Dept'),
+                User(email='mentor@test.edu', hashed_password=valid_hash, role='mentor', name='Mentor'),
+                User(email='student001@test.edu', hashed_password=valid_hash, role='student', name='Test Student')
             ]
             db.add_all(seed_users)
             db.commit()
@@ -224,6 +244,60 @@ def setup_database():
         return {"message": "Database tables already exist and are fully populated!"}
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/api/force-patch")
+def force_patch():
+    try:
+        from sqlalchemy import text
+        from app.database import engine
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN created_by_role TEXT"))
+        return {"success": True, "message": "Column added"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/reset-pass")
+def reset_pass():
+    try:
+        from passlib.context import CryptContext
+        from app.database import SessionLocal
+        from app.models.user import User
+        
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        db = SessionLocal()
+        
+        valid_hash = pwd_context.hash("admin123")
+        users = db.query(User).all()
+        for u in users:
+            if u.email in ["admin@example.com", "coordinator@test.edu", "finance@test.edu", "faculty@test.edu", "student001@test.edu", "mentor@test.edu"]:
+                u.hashed_password = valid_hash
+                
+        db.commit()
+        db.close()
+        return {"success": True, "message": "All default user passwords reset to 'admin123'"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cleanup-students")
+def cleanup_students():
+    try:
+        from app.database import SessionLocal
+        from app.models.user import User, ClubMembership, RoleEnum
+        db = SessionLocal()
+        
+        students = db.query(User).filter(User.role == RoleEnum.student).all()
+        deleted_count = 0
+        for student in students:
+            has_membership = db.query(ClubMembership).filter(ClubMembership.user_id == student.id).first()
+            if not has_membership:
+                db.delete(student)
+                deleted_count += 1
+                
+        db.commit()
+        db.close()
+        return {"success": True, "message": f"Successfully deleted {deleted_count} student(s) who were not part of any club."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/api/upgrade-db")
 def upgrade_database():
@@ -440,6 +514,7 @@ from app.api.routers.admin import router as admin_router
 from app.api.routers.profile import router as profile_router
 from app.api.routers.finance import router as finance_router
 from app.api.routers.analytics import router as analytics_router
+from app.api.routers.coordinator import router as coordinator_router
 
 app.include_router(events_router)
 app.include_router(clubs_router)
@@ -453,6 +528,7 @@ app.include_router(admin_router)
 app.include_router(profile_router)
 app.include_router(finance_router)
 app.include_router(analytics_router)
+app.include_router(coordinator_router)
 
 # Serve static files
 try:

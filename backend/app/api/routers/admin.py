@@ -33,25 +33,109 @@ def create_user(request: AdminUserCreate, current_user: User = Depends(get_curre
         hashed_password=pwd_context.hash(request.password),
         name=request.name,
         role=request.role,
-        department=request.department
+        department=request.department,
+        created_by_role="admin"
     )
     db.add(new_user)
     db.commit()
     return {"message": "User created successfully"}
+
+class AdminUserUpdate(BaseModel):
+    name: str
+    email: str
+    password: str = ""
+    role: RoleEnum
+    department: str = ""
+
+@router.put("/users/{user_id}")
+def update_user(user_id: int, request: AdminUserUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    target.name = request.name
+    target.email = request.email
+    target.role = request.role
+    target.department = request.department
+    
+    if request.password:
+        target.hashed_password = pwd_context.hash(request.password)
+        
+    db.commit()
+    return {"message": "User updated successfully"}
+
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    from app.models.user import ClubMembership, ClubJoinRequest, Student
+    
+    # Manually delete foreign key relations
+    db.query(ClubMembership).filter(ClubMembership.user_id == user_id).delete(synchronize_session=False)
+    db.query(ClubJoinRequest).filter(ClubJoinRequest.user_id == user_id).delete(synchronize_session=False)
+    db.query(Student).filter(Student.user_id == user_id).delete(synchronize_session=False)
+    
+    db.delete(target)
+    db.commit()
+    return {"message": "User deleted successfully"}
 
 @router.get("/users")
 def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.admin:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
+    from app.models.user import ClubMembership, Club
     users = db.query(User).order_by(User.id.desc()).all()
-    return [{
-        "id": u.id,
-        "name": u.name,
-        "email": u.email,
-        "role": u.role,
-        "department": u.department
-    } for u in users]
+    
+    result = []
+    for u in users:
+        memberships = db.query(ClubMembership).filter(ClubMembership.user_id == u.id).all()
+        clubs_list = []
+        for m in memberships:
+            club = db.query(Club).filter(Club.id == m.club_id).first()
+            if club:
+                clubs_list.append({"club_id": club.id, "club_name": club.name, "role": m.role.value})
+        
+        result.append({
+            "id": u.id,
+            "name": u.name,
+            "email": u.email,
+            "role": u.role,
+            "department": u.department,
+            "created_by_role": u.created_by_role,
+            "clubs": clubs_list
+        })
+        
+    return result
+
+from app.models.user import ClubJoinRequest, Club
+@router.get("/club-requests")
+def get_pending_club_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    requests = db.query(ClubJoinRequest).filter(ClubJoinRequest.status == "pending_admin").all()
+    result = []
+    for req in requests:
+        user = db.query(User).filter(User.id == req.user_id).first()
+        club = db.query(Club).filter(Club.id == req.club_id).first()
+        result.append({
+            "id": req.id,
+            "user_name": user.name if user else "Unknown",
+            "user_email": user.email if user else "Unknown",
+            "club_name": club.name if club else "Unknown",
+            "message": req.message,
+            "created_at": req.created_at
+        })
+    return result
 
 @router.get("/programs")
 def get_admin_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

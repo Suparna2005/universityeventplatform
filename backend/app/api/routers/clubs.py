@@ -31,7 +31,7 @@ def create_club(club: ClubCreate, current_user: User = Depends(get_current_user)
     if existing:
         raise HTTPException(status_code=400, detail="Club already exists")
         
-    new_club = Club(name=club.name, description=club.description, achievements=club.achievements)
+    new_club = Club(name=club.name, description=club.description, achievements=club.achievements, club_type=club.club_type, department=club.department)
     db.add(new_club)
     db.commit()
     db.refresh(new_club)
@@ -127,8 +127,8 @@ def list_join_requests(club_id: int, current_user: User = Depends(get_current_us
         ))
     return result
 
-@router.post("/requests/{request_id}/approve")
-def approve_request(request_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@router.put("/requests/{request_id}/forward")
+def forward_request(request_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
@@ -138,18 +138,38 @@ def approve_request(request_id: int, current_user: User = Depends(get_current_us
         membership = db.query(ClubMembership).filter(ClubMembership.club_id == req.club_id, ClubMembership.user_id == current_user.id).first()
         if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president]:
             is_authorized = True
-            
+
     if not is_authorized:
-        raise HTTPException(status_code=403, detail="Not authorized to approve requests")
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    req.status = JoinRequestStatus.pending_admin
+    db.commit()
+    return {"message": "Request forwarded to Admin for final approval"}
+
+@router.post("/requests/{request_id}/approve")
+def approve_request(request_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only Admin can give final approval for club memberships")
+
+    req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == request_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    if req.status != JoinRequestStatus.pending_admin:
+        raise HTTPException(status_code=400, detail="Request has not been forwarded to admin yet")
 
     req.status = JoinRequestStatus.approved
     
-    new_membership = ClubMembership(
-        user_id=req.user_id,
-        club_id=req.club_id,
-        role=ClubMemberRole.member
-    )
-    db.add(new_membership)
+    # Check if already a member
+    existing = db.query(ClubMembership).filter(ClubMembership.club_id == req.club_id, ClubMembership.user_id == req.user_id).first()
+    if not existing:
+        new_member = ClubMembership(
+            club_id=req.club_id,
+            user_id=req.user_id,
+            role=ClubMemberRole.member
+        )
+        db.add(new_member)
+    
     db.commit()
     return {"message": "Request approved"}
 
@@ -172,6 +192,11 @@ def reject_request(request_id: int, current_user: User = Depends(get_current_use
     db.commit()
     return {"message": "Request rejected"}
 
+@router.get("/my-memberships")
+def get_my_memberships(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    memberships = db.query(ClubMembership).filter(ClubMembership.user_id == current_user.id).all()
+    return [{"club_id": m.club_id, "role": m.role} for m in memberships]
+
 @router.get("/{club_id}/members", response_model=List[ClubMembershipResponse])
 def list_members(club_id: int, db: Session = Depends(get_db)):
     memberships = db.query(ClubMembership).filter(ClubMembership.club_id == club_id).order_by(ClubMembership.joined_at.asc()).all()
@@ -187,7 +212,8 @@ def list_members(club_id: int, db: Session = Depends(get_db)):
             joined_at=mem.joined_at,
             activity_points=mem.activity_points,
             user_name=user.name if user else "Unknown",
-            user_email=user.email if user else "Unknown"
+            user_email=user.email if user else "Unknown",
+            user_department=user.department if user else None
         ))
     return result
 
@@ -226,10 +252,15 @@ def add_member_manually(club_id: int, member_add: ClubMemberAdd, current_user: U
     if existing:
         raise HTTPException(status_code=400, detail="User is already a member")
 
+    # Auto-detect role: if they are a system club_coordinator, they must be the club's coordinator
+    final_role = member_add.role
+    if target_user.role in [RoleEnum.club_coordinator, RoleEnum.coordinator]:
+        final_role = ClubMemberRole.club_coordinator
+
     new_membership = ClubMembership(
         user_id=target_user.id,
         club_id=club_id,
-        role=member_add.role,
+        role=final_role,
         club_department=member_add.club_department
     )
     db.add(new_membership)

@@ -9,6 +9,8 @@ import AnalyticsDashboard from './AnalyticsDashboard';
 import ClubManagement from './ClubManagement';
 import ClubsDashboard from '../student/ClubsDashboard';
 import UserManagement from './UserManagement';
+import AdminClubApprovals from './AdminClubApprovals';
+import StudentManagement from './StudentManagement';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('events'); // legacy tab
@@ -437,6 +439,7 @@ const AdminDashboard = () => {
           category: 'Clubs & Users',
           items: [
             { id: 'admin_clubs_all', label: 'Manage Clubs' },
+            { id: 'admin_club_approvals', label: 'Pending Memberships' },
             { id: 'admin_clubs_browse', label: 'Active Clubs Directory' },
             { id: 'admin_users_students', label: 'Manage Users' },
           ]
@@ -487,6 +490,12 @@ const AdminDashboard = () => {
           category: 'Clubs',
           items: [
             { id: 'admin_clubs_browse', label: 'Active Clubs Directory' },
+          ]
+        },
+        {
+          category: 'Students',
+          items: [
+            { id: 'coordinator_students', label: 'Manage Students' },
           ]
         },
         {
@@ -637,7 +646,7 @@ const AdminDashboard = () => {
           {/* We hide the legacy tabs, but keep them rendering if needed or just use activeTab */}
           
           {/* Show Placeholder for unimplemented sidebar items */}
-          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse', 'admin_users_students'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
+          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse', 'admin_users_students', 'coordinator_students', 'admin_club_approvals'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
             <div style={{ padding: '4rem', textAlign: 'center', background: 'rgba(255,255,255,0.8)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
               <h2 style={{ color: 'var(--primary)', marginBottom: '1rem', fontSize: '1.5rem' }}>✨ Coming Soon</h2>
               <p style={{ color: '#64748b' }}>The "{menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label}" module is currently under development.</p>
@@ -648,6 +657,16 @@ const AdminDashboard = () => {
           {/* User Management View */}
           {activeSubMenu === 'admin_users_students' && (
             <UserManagement />
+          )}
+
+          {/* Admin Club Approvals View */}
+          {activeSubMenu === 'admin_club_approvals' && (
+            <AdminClubApprovals />
+          )}
+
+          {/* Coordinator Student Management View */}
+          {activeSubMenu === 'coordinator_students' && (
+            <StudentManagement />
           )}
 
           {/* Club Management View */}

@@ -11,13 +11,28 @@ const ClubsDashboard = () => {
   
   const [showGallery, setShowGallery] = useState(null);
   const [galleryImages, setGalleryImages] = useState([]);
+  const [myMemberships, setMyMemberships] = useState([]);
   
   const { user } = useContext(AuthContext);
   const baseURL = '';
 
   useEffect(() => {
     fetchClubs();
-  }, []);
+    if (user) {
+      fetchMyMemberships();
+    }
+  }, [user]);
+
+  const fetchMyMemberships = async () => {
+    try {
+      const res = await axios.get(`${baseURL}/api/clubs/my-memberships`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setMyMemberships(res.data);
+    } catch (err) {
+      console.error('Failed to fetch memberships', err);
+    }
+  };
 
   const fetchClubs = async () => {
     try {
@@ -64,6 +79,25 @@ const ClubsDashboard = () => {
       setShowGallery(club);
     } catch (err) {
       alert("Error loading gallery.");
+    }
+  };
+
+  const handleGalleryUpload = async (e) => {
+    if (!showGallery) return;
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      await axios.post(`${baseURL}/api/clubs/${showGallery.id}/gallery`, formData, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' }
+      });
+      alert('Photo uploaded successfully!');
+      // refresh gallery
+      viewGallery(showGallery);
+    } catch (err) {
+      alert(`Error uploading photo: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -146,7 +180,15 @@ const ClubsDashboard = () => {
               <h3 style={{ fontSize: '1.5rem', color: 'var(--primary)', margin: 0 }}>
                 {showGallery.name} Gallery
               </h3>
-              <button onClick={() => setShowGallery(null)} className="btn-secondary">Close</button>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                {myMemberships.find(m => m.club_id === showGallery.id && ['core', 'president', 'head'].includes(m.role)) && (
+                  <label className="btn-primary" style={{ cursor: 'pointer', margin: 0 }}>
+                    Upload Photo
+                    <input type="file" style={{ display: 'none' }} accept="image/*" onChange={handleGalleryUpload} />
+                  </label>
+                )}
+                <button onClick={() => setShowGallery(null)} className="btn-secondary">Close</button>
+              </div>
             </div>
             
             {galleryImages.length === 0 ? (

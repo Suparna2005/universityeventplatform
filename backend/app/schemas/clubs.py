@@ -7,6 +7,8 @@ class ClubBase(BaseModel):
     name: str
     description: Optional[str] = ""
     achievements: Optional[str] = None
+    club_type: Optional[str] = "university"
+    department: Optional[str] = None
 
 class ClubCreate(ClubBase):
     pass
@@ -35,6 +37,7 @@ class ClubMembershipResponse(ClubMembershipBase):
     activity_points: int
     user_name: str
     user_email: str
+    user_department: Optional[str] = None
 
     class Config:
         from_attributes = True

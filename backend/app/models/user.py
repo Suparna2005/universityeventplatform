@@ -7,6 +7,7 @@ from app.models.base import Base
 class RoleEnum(str, enum.Enum):
     admin = "admin"
     coordinator = "coordinator"
+    club_coordinator = "club_coordinator"
     student = "student"
     finance = "finance"
     mentor = "mentor"
@@ -17,11 +18,23 @@ class ClubMemberRole(str, enum.Enum):
     core = "core"
     head = "head"
     president = "president"
+    club_coordinator = "club_coordinator"
 
 class JoinRequestStatus(str, enum.Enum):
-    pending = "pending"
+    pending = "pending" # pending coordinator
+    pending_admin = "pending_admin" # forwarded to admin
     approved = "approved"
     rejected = "rejected"
+
+class LeaveRequestStatus(str, enum.Enum):
+    pending = "pending" # pending coordinator
+    pending_admin = "pending_admin" # forwarded to admin
+    approved = "approved"
+    rejected = "rejected"
+
+class ClubType(str, enum.Enum):
+    departmental = "departmental"
+    university = "university"
 
 class User(Base):
     __tablename__ = "users"
@@ -38,6 +51,7 @@ class User(Base):
     phone_number = Column(String, nullable=True)
     department = Column(String, nullable=True)
     gender = Column(String, nullable=True) # e.g. male, female, other
+    created_by_role = Column(String, nullable=True) # e.g. 'admin' or 'coordinator'
 
     # If the user is a student, link them to student details
     student_profile = relationship("Student", back_populates="user", uselist=False)
@@ -62,6 +76,8 @@ class Club(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True, nullable=False)
     description = Column(String)
+    club_type = Column(String, default="university")
+    department = Column(String, nullable=True) # Only if club_type == departmental
     created_at = Column(DateTime, default=datetime.utcnow)
     rating = Column(Float, default=0.0)
     achievements = Column(String, nullable=True)
@@ -111,3 +127,16 @@ class ClubJoinRequest(Base):
 
     user = relationship("User")
     club = relationship("Club", back_populates="join_requests")
+
+class ClubLeaveRequest(Base):
+    __tablename__ = "club_leave_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    club_id = Column(Integer, ForeignKey("clubs.id"), nullable=False)
+    status = Column(String, default="pending", nullable=False)
+    reason = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    club = relationship("Club")

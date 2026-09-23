@@ -37,15 +37,18 @@ const ClubManagement = () => {
     }
   };
 
-  const handleCreateClub = async () => {
-    const name = window.prompt("Enter new club name:");
-    if (!name) return;
-    const desc = window.prompt("Enter description:");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newClubData, setNewClubData] = useState({ name: '', description: '', club_type: 'university', department: '' });
+
+  const handleCreateClubSubmit = async (e) => {
+    e.preventDefault();
     try {
-      await axios.post(`${baseURL}/api/clubs/`, { name, description: desc }, {
+      await axios.post(`${baseURL}/api/clubs/`, newClubData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       alert('Club created successfully!');
+      setShowCreateModal(false);
+      setNewClubData({ name: '', description: '', club_type: 'university', department: '' });
       fetchClubs();
     } catch (err) {
       alert(`Error creating club: ${err.response?.data?.detail || err.message}`);
@@ -74,8 +77,12 @@ const ClubManagement = () => {
 
   const handleRequestAction = async (reqId, action) => {
     try {
-      await axios.post(`${baseURL}/api/clubs/requests/${reqId}/${action}`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert(`Request ${action}d successfully!`);
+      if (action === 'forward') {
+        await axios.put(`${baseURL}/api/clubs/requests/${reqId}/forward`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      } else {
+        await axios.post(`${baseURL}/api/clubs/requests/${reqId}/${action}`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      }
+      alert(`Request ${action}ed successfully!`);
       // Refresh the club to get updated members/requests
       handleSelectClub(selectedClub);
     } catch (err) {
@@ -157,9 +164,9 @@ const ClubManagement = () => {
   };
 
   const handleAddMember = async () => {
-    const email = window.prompt("Enter the exact email address of the student/faculty to add:");
+    const email = window.prompt("Enter the exact email address of the user to add:");
     if (!email) return;
-    const role = window.prompt("Enter their role (member, core, head, president):", "member");
+    const role = window.prompt("Enter role (member, core, head, president). Note: If they are a Coordinator, this will be auto-detected:", "member");
     if (!role) return;
     try {
       await axios.post(`${baseURL}/api/clubs/${selectedClub}/members/add`, {
@@ -191,9 +198,39 @@ const ClubManagement = () => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary)' }}>All Clubs</h3>
             {user?.role === 'admin' && (
-              <button onClick={handleCreateClub} className="btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}>+ New</button>
+              <button onClick={() => setShowCreateModal(true)} className="btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}>+ New</button>
             )}
           </div>
+
+          {showCreateModal && (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+              <div className="glass-card" style={{ padding: '2rem', width: '400px', background: 'white' }}>
+                <h3 style={{ marginTop: 0 }}>Create New Club</h3>
+                <form onSubmit={handleCreateClubSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <input type="text" className="input-glass" placeholder="Club Name" required value={newClubData.name} onChange={e => setNewClubData({...newClubData, name: e.target.value})} />
+                  <input type="text" className="input-glass" placeholder="Description" required value={newClubData.description} onChange={e => setNewClubData({...newClubData, description: e.target.value})} />
+                  <select className="input-glass" value={newClubData.club_type} onChange={e => setNewClubData({...newClubData, club_type: e.target.value, department: e.target.value === 'university' ? '' : newClubData.department})}>
+                    <option value="university">University Club (All Departments)</option>
+                    <option value="departmental">Departmental Club</option>
+                  </select>
+                  {newClubData.club_type === 'departmental' && (
+                    <select className="input-glass" required value={newClubData.department} onChange={e => setNewClubData({...newClubData, department: e.target.value})}>
+                      <option value="" disabled>Select Department</option>
+                      <option value="CSE">CSE</option>
+                      <option value="ECE">ECE</option>
+                      <option value="ME">ME</option>
+                      <option value="EE">EE</option>
+                      <option value="CE">CE</option>
+                    </select>
+                  )}
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                    <button type="submit" className="btn-primary" style={{ flex: 1 }}>Create</button>
+                    <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowCreateModal(false)}>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {clubs.map(club => (
               <li 
@@ -255,7 +292,7 @@ const ClubManagement = () => {
                         <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#4b5563' }}>"{req.message}"</p>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button onClick={() => handleRequestAction(req.id, 'approve')} className="btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}>Approve</button>
+                        <button onClick={() => handleRequestAction(req.id, 'forward')} className="btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}>Forward to Admin</button>
                         <button onClick={() => handleRequestAction(req.id, 'reject')} className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}>Reject</button>
                       </div>
                     </div>
@@ -311,18 +348,7 @@ const ClubManagement = () => {
 
                           {/* Department Column */}
                           <td style={{ padding: '1rem' }}>
-                            {editingMember === member.id ? (
-                              <input 
-                                type="text" 
-                                value={editDept} 
-                                onChange={(e) => setEditDept(e.target.value)}
-                                className="input-glass"
-                                style={{ padding: '0.25rem', width: '100px' }}
-                                placeholder="Dept..."
-                              />
-                            ) : (
-                              member.club_department || '-'
-                            )}
+                            {member.user_department || '-'}
                           </td>
                           
                           {/* Points Column */}
