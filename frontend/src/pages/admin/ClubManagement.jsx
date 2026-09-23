@@ -156,6 +156,26 @@ const ClubManagement = () => {
     }
   };
 
+  const handleAddMember = async () => {
+    const email = window.prompt("Enter the exact email address of the student/faculty to add:");
+    if (!email) return;
+    const role = window.prompt("Enter their role (member, core, head, president):", "member");
+    if (!role) return;
+    try {
+      await axios.post(`${baseURL}/api/clubs/${selectedClub}/members/add`, {
+        email: email,
+        role: role.toLowerCase(),
+        club_department: ""
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      alert('Member added successfully!');
+      handleSelectClub(selectedClub); // refresh members
+    } catch (err) {
+      alert(`Error adding member: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
   if (loading) return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading Clubs...</div>;
 
   return (
@@ -170,7 +190,9 @@ const ClubManagement = () => {
         <div className="glass-card" style={{ padding: '1rem', height: 'fit-content' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary)' }}>All Clubs</h3>
-            <button onClick={handleCreateClub} className="btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}>+ New</button>
+            {user?.role === 'admin' && (
+              <button onClick={handleCreateClub} className="btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}>+ New</button>
+            )}
           </div>
           <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {clubs.map(club => (
@@ -208,6 +230,11 @@ const ClubManagement = () => {
                     </span>
                   )}
                   <span className="badge badge-secondary">{members.length} Total Members</span>
+                  {user?.role === 'admin' && (
+                    <button onClick={handleAddMember} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
+                      + Add Member
+                    </button>
+                  )}
                   <button onClick={handleExportCSV} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
                     Export CSV
                   </button>

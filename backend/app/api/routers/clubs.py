@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models.user import User, RoleEnum, Club, ClubMembership, ClubJoinRequest, ClubMemberRole, JoinRequestStatus, ClubGallery
 from app.schemas.clubs import (
     ClubCreate, ClubResponse, ClubMembershipResponse, 
-    ClubJoinRequestCreate, ClubJoinRequestResponse, RoleUpdate
+    ClubJoinRequestCreate, ClubJoinRequestResponse, RoleUpdate, ClubMemberAdd
 )
 from app.api.dependencies import get_current_user
 from typing import List
@@ -19,13 +19,13 @@ router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 
 @router.get("/list", response_model=List[ClubResponse])
 def list_clubs(db: Session = Depends(get_db)):
-    clubs = db.query(Club).all()
+    clubs = db.query(Club).order_by(Club.name.asc()).all()
     return clubs
 
 @router.post("/", response_model=ClubResponse)
 def create_club(club: ClubCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
-        raise HTTPException(status_code=403, detail="Only Admins and Coordinators can create new clubs")
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only Admins can create new clubs")
         
     existing = db.query(Club).filter(Club.name == club.name).first()
     if existing:
@@ -174,7 +174,7 @@ def reject_request(request_id: int, current_user: User = Depends(get_current_use
 
 @router.get("/{club_id}/members", response_model=List[ClubMembershipResponse])
 def list_members(club_id: int, db: Session = Depends(get_db)):
-    memberships = db.query(ClubMembership).filter(ClubMembership.club_id == club_id).all()
+    memberships = db.query(ClubMembership).filter(ClubMembership.club_id == club_id).order_by(ClubMembership.joined_at.asc()).all()
     result = []
     for mem in memberships:
         user = db.query(User).filter(User.id == mem.user_id).first()
@@ -212,6 +212,39 @@ def update_member_role(club_id: int, user_id: int, role_update: RoleUpdate, curr
         
     db.commit()
     return {"message": "Role updated"}
+
+@router.post("/{club_id}/members/add")
+def add_member_manually(club_id: int, member_add: ClubMemberAdd, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only Admins can manually add members")
+
+    target_user = db.query(User).filter(User.email == member_add.email).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User with that email not found")
+
+    existing = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == target_user.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="User is already a member")
+
+    new_membership = ClubMembership(
+        user_id=target_user.id,
+        club_id=club_id,
+        role=member_add.role,
+        club_department=member_add.club_department
+    )
+    db.add(new_membership)
+    
+    # Auto-approve any pending join requests they might have had
+    pending_req = db.query(ClubJoinRequest).filter(
+        ClubJoinRequest.club_id == club_id, 
+        ClubJoinRequest.user_id == target_user.id,
+        ClubJoinRequest.status == JoinRequestStatus.pending
+    ).first()
+    if pending_req:
+        pending_req.status = JoinRequestStatus.approved
+        
+    db.commit()
+    return {"message": "Member added successfully"}
 
 @router.delete("/{club_id}/leave")
 def leave_club(club_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

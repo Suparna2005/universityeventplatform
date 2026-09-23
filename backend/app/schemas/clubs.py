@@ -58,3 +58,8 @@ class ClubJoinRequestResponse(BaseModel):
 class RoleUpdate(BaseModel):
     role: ClubMemberRole
     club_department: Optional[str] = None
+
+class ClubMemberAdd(BaseModel):
+    email: str
+    role: ClubMemberRole
+    club_department: Optional[str] = None

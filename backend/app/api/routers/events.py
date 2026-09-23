@@ -15,7 +15,7 @@ def list_events(db: Session = Depends(get_db)):
         EventState.published, 
         EventState.pending_completion, 
         EventState.completed
-    ])).all()
+    ])).order_by(Event.title.asc()).all()
     
     # We serialize manually for now before adding Pydantic schemas
     return [{

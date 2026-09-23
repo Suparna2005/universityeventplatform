@@ -119,14 +119,16 @@ const ClubsDashboard = () => {
               <button onClick={() => viewGallery(club)} className="btn-secondary" style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                 View Gallery
               </button>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => setSelectedClubForJoin(club.id)} className="btn-primary" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                  <CheckCircle size={18} /> Join
-                </button>
-                <button onClick={() => handleLeaveClub(club.id)} style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.75rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                  Leave
-                </button>
-              </div>
+              {user && (user.role === 'student' || user.role === 'faculty') && (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => setSelectedClubForJoin(club.id)} className="btn-primary" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
+                    <CheckCircle size={18} /> Join
+                  </button>
+                  <button onClick={() => handleLeaveClub(club.id)} style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.75rem', cursor: 'pointer', fontWeight: 'bold' }}>
+                    Leave
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ))}

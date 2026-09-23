@@ -83,7 +83,7 @@ const Login = () => {
           </button>
         </form>
         <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          <p>Don't have an account? <Link to="/signup" style={{ color: 'var(--primary)', fontWeight: 'bold', textDecoration: 'none' }}>Sign Up Here</Link></p>
+          <p>Don't have an account? Please contact the University Admin for credentials.</p>
         </div>
       </div>
     </div>

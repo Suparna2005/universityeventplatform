@@ -8,6 +8,7 @@ import BudgetDashboard from './BudgetDashboard';
 import AnalyticsDashboard from './AnalyticsDashboard';
 import ClubManagement from './ClubManagement';
 import ClubsDashboard from '../student/ClubsDashboard';
+import UserManagement from './UserManagement';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('events'); // legacy tab
@@ -436,7 +437,7 @@ const AdminDashboard = () => {
           category: 'Clubs & Users',
           items: [
             { id: 'admin_clubs_all', label: 'Manage Clubs' },
-            { id: 'admin_clubs_browse', label: 'Browse Clubs Directory' },
+            { id: 'admin_clubs_browse', label: 'Active Clubs Directory' },
             { id: 'admin_users_students', label: 'Manage Users' },
           ]
         },
@@ -485,8 +486,7 @@ const AdminDashboard = () => {
         {
           category: 'Clubs',
           items: [
-            { id: 'clubs_manage', label: 'Manage Clubs' },
-            { id: 'admin_clubs_browse', label: 'Browse Clubs Directory' },
+            { id: 'admin_clubs_browse', label: 'Active Clubs Directory' },
           ]
         },
         {
@@ -570,10 +570,10 @@ const AdminDashboard = () => {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f1f5f9' }}>
+    <div className="corporate-theme" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-gradient)' }}>
       
       {/* Sidebar Navigation */}
-      <aside style={{ width: '280px', background: 'white', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
+      <aside style={{ width: '280px', background: 'var(--glass-bg)', borderRight: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
         <div style={{ padding: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
           <h2 style={{ fontSize: '1.25rem', color: 'var(--primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
             <Brain size={28} /> BRAINWARE
@@ -637,12 +637,17 @@ const AdminDashboard = () => {
           {/* We hide the legacy tabs, but keep them rendering if needed or just use activeTab */}
           
           {/* Show Placeholder for unimplemented sidebar items */}
-          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
+          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse', 'admin_users_students'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
             <div style={{ padding: '4rem', textAlign: 'center', background: 'rgba(255,255,255,0.8)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
               <h2 style={{ color: 'var(--primary)', marginBottom: '1rem', fontSize: '1.5rem' }}>✨ Coming Soon</h2>
               <p style={{ color: '#64748b' }}>The "{menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label}" module is currently under development.</p>
               <button onClick={() => handleSidebarClick('Events', 'events_all')} className="btn-primary" style={{ marginTop: '1.5rem' }}>Return to All Events</button>
             </div>
+          )}
+
+          {/* User Management View */}
+          {activeSubMenu === 'admin_users_students' && (
+            <UserManagement />
           )}
 
           {/* Club Management View */}

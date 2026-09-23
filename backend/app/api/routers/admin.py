@@ -8,13 +8,58 @@ from app.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+from passlib.context import CryptContext
+from pydantic import BaseModel
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class AdminUserCreate(BaseModel):
+    name: str
+    email: str
+    password: str
+    role: RoleEnum
+    department: str = ""
+
+@router.post("/users")
+def create_user(request: AdminUserCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only Admins can create credentials")
+    
+    if db.query(User).filter(User.email == request.email).first():
+        raise HTTPException(status_code=400, detail="Email already exists")
+        
+    new_user = User(
+        email=request.email,
+        hashed_password=pwd_context.hash(request.password),
+        name=request.name,
+        role=request.role,
+        department=request.department
+    )
+    db.add(new_user)
+    db.commit()
+    return {"message": "User created successfully"}
+
+@router.get("/users")
+def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    users = db.query(User).order_by(User.id.desc()).all()
+    return [{
+        "id": u.id,
+        "name": u.name,
+        "email": u.email,
+        "role": u.role,
+        "department": u.department
+    } for u in users]
+
 @router.get("/programs")
 def get_admin_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.finance]:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     try:
-        events = db.query(Event).all()
+        events = db.query(Event).order_by(Event.title.asc()).all()
         
         result = []
         for e in events:
