@@ -97,6 +97,10 @@ async def lifespan(app: FastAPI):
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE students ADD COLUMN section TEXT")
                 except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE feedback ADD COLUMN user_id INTEGER")
+                except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE club_leave_requests ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'")
+                except sqlite3.OperationalError: pass
                 conn.commit()
                 conn.close()
             except Exception as e:
@@ -142,7 +146,8 @@ async def lifespan(app: FastAPI):
                     "CREATE TYPE accountrequeststatus AS ENUM ('pending', 'approved', 'rejected')",
                     "CREATE TABLE IF NOT EXISTS account_requests (id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, email VARCHAR NOT NULL, requested_role VARCHAR NOT NULL, department VARCHAR NOT NULL, year INTEGER, section VARCHAR, status accountrequeststatus DEFAULT 'pending' NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
                     "ALTER TABLE students ADD COLUMN year INTEGER",
-                    "ALTER TABLE students ADD COLUMN section VARCHAR"
+                    "ALTER TABLE students ADD COLUMN section VARCHAR",
+                    "ALTER TABLE feedback ADD COLUMN user_id INTEGER REFERENCES users(id)"
                 ]
                 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                     for q in queries:

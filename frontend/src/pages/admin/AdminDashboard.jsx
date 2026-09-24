@@ -29,6 +29,7 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('events'); // legacy tab
   const [activeMenu, setActiveMenu] = useState('Events');
   const [activeSubMenu, setActiveSubMenu] = useState('events_all');
+  const [sidebarTick, setSidebarTick] = useState(0);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -55,6 +56,7 @@ const AdminDashboard = () => {
 
   const [promptModal, setPromptModal] = useState({ isOpen: false, title: '', message: '', defaultValue: '', placeholder: '', onConfirm: null, onCancel: () => setPromptModal({ isOpen: false }) });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
+  const [pendingReqCounts, setPendingReqCounts] = useState({ faculty: 0, student: 0 });
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -94,6 +96,21 @@ const AdminDashboard = () => {
       setClubs(clubsResult.value.data);
     } else {
       console.error('Failed to load clubs:', clubsResult.reason);
+    }
+    
+    if (user.role === 'admin') {
+      try {
+        const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+        const [joinRes, leaveRes] = await Promise.all([
+          axios.get(`${baseURL}/api/admin/club-requests`, { headers }),
+          axios.get(`${baseURL}/api/admin/club-leave-requests`, { headers })
+        ]);
+        const facultyCount = joinRes.data.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase())).length + leaveRes.data.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase())).length;
+        const studentCount = joinRes.data.filter(r => r.role && r.role.toLowerCase() === 'student').length + leaveRes.data.filter(r => r.role && r.role.toLowerCase() === 'student').length;
+        setPendingReqCounts({ faculty: facultyCount, student: studentCount });
+      } catch (err) {
+        console.error("Failed to fetch pending requests counts");
+      }
     }
     setLoading(false);
   };
@@ -567,9 +584,15 @@ const AdminDashboard = () => {
           category: 'Clubs & Users',
           items: [
             { id: 'admin_clubs_all', label: 'Manage Clubs' },
-            { id: 'admin_club_approvals', label: 'Pending Memberships' },
             { id: 'admin_clubs_browse', label: 'Active Clubs Directory' },
             { id: 'admin_users_students', label: 'Manage Users' },
+          ]
+        },
+        {
+          category: 'Pending Requests',
+          items: [
+            { id: 'admin_req_faculty', label: 'Faculty Requests', badge: pendingReqCounts.faculty > 0 },
+            { id: 'admin_req_student', label: 'Student Requests', badge: pendingReqCounts.student > 0 }
           ]
         },
         {
@@ -649,6 +672,7 @@ const AdminDashboard = () => {
 
     setActiveMenu(menu);
     setActiveSubMenu(subMenu);
+    setSidebarTick(prev => prev + 1);
     
     // Legacy Tab mapping to reuse existing components
     if (menu === 'Reports') setActiveTab('analytics');
@@ -748,10 +772,18 @@ const AdminDashboard = () => {
                         color: activeSubMenu === item.id ? 'white' : '#334155',
                         border: 'none', cursor: 'pointer', fontSize: '0.9rem',
                         transition: 'all 0.2s ease',
-                        marginBottom: '0.1rem'
+                        marginBottom: '0.1rem',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                       }}
                     >
-                      {item.label}
+                      <span>{item.label}</span>
+                      {item.badge && (
+                        <span style={{
+                          display: 'inline-block', width: '8px', height: '8px',
+                          background: '#ef4444', borderRadius: '50%', boxShadow: '0 0 5px rgba(239,68,68,0.5)',
+                          animation: 'pulse 2s infinite'
+                        }}></span>
+                      )}
                     </button>
                   </li>
                 ))}
@@ -775,6 +807,9 @@ const AdminDashboard = () => {
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.9rem', color: '#64748b' }}>Welcome, {user.name}</span>
+            <button onClick={() => navigate('/dashboard')} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              Main Dashboard
+            </button>
             <button onClick={() => navigate('/profile')} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <UserCircle size={18} /> Profile
             </button>
@@ -787,7 +822,7 @@ const AdminDashboard = () => {
           {/* We hide the legacy tabs, but keep them rendering if needed or just use activeTab */}
           
           {/* Show Placeholder for unimplemented sidebar items */}
-          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse', 'admin_users_students', 'coordinator_students', 'admin_club_approvals'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
+          {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse', 'admin_users_students', 'admin_req_faculty', 'admin_req_student', 'coordinator_students', 'admin_club_approvals'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
             <div style={{ padding: '4rem', textAlign: 'center', background: 'rgba(255,255,255,0.8)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
               <h2 style={{ color: 'var(--primary)', marginBottom: '1rem', fontSize: '1.5rem' }}>✨ Coming Soon</h2>
               <p style={{ color: '#64748b' }}>The "{menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label}" module is currently under development.</p>
@@ -796,8 +831,11 @@ const AdminDashboard = () => {
           )}
 
           {/* User Management View */}
-          {activeSubMenu === 'admin_users_students' && (
-            <UserManagement />
+          {['admin_users_students', 'admin_req_faculty', 'admin_req_student'].includes(activeSubMenu) && (
+            <UserManagement 
+              key={`${activeSubMenu}-${sidebarTick}`} 
+              externalActiveTab={activeSubMenu === 'admin_req_faculty' ? 'requests_faculty' : activeSubMenu === 'admin_req_student' ? 'requests_student' : null} 
+            />
           )}
 
           {/* Admin Club Approvals View */}

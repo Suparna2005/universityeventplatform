@@ -132,7 +132,8 @@ def join_club(club_id: int, req: ClubJoinRequestCreate, current_user: User = Dep
     new_req = ClubJoinRequest(
         user_id=current_user.id,
         club_id=club_id,
-        message=req.message
+        message=req.message,
+        status=JoinRequestStatus.pending
     )
     db.add(new_req)
     db.commit()
@@ -143,7 +144,7 @@ def update_join_request(req_id: int, message: str = Body(..., embed=True), curre
     req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == req_id, ClubJoinRequest.user_id == current_user.id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
-    if req.status not in [JoinRequestStatus.pending, JoinRequestStatus.pending_admin]:
+    if req.status != JoinRequestStatus.pending:
         raise HTTPException(status_code=400, detail="Cannot edit a request that is already processed")
         
     req.message = message
@@ -345,7 +346,19 @@ def update_member_role(club_id: int, user_id: int, role_update: RoleUpdate, curr
     target_membership.role = role_update.role
     if role_update.club_department is not None:
         target_membership.club_department = role_update.club_department
-        
+
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if target_user:
+        if role_update.role == ClubMemberRole.club_coordinator and target_user.role in [RoleEnum.student, RoleEnum.faculty]:
+            target_user.role = RoleEnum.club_coordinator
+        elif role_update.role != ClubMemberRole.club_coordinator and target_user.role == RoleEnum.club_coordinator:
+            # Check if they are club_coordinator in ANY OTHER club before demoting
+            other = db.query(ClubMembership).filter(ClubMembership.user_id == user_id, ClubMembership.role == ClubMemberRole.club_coordinator, ClubMembership.club_id != club_id).first()
+            if not other:
+                # We revert them to student by default, as we don't know their original role perfectly.
+                # Since they were a student or faculty, 'student' is safest unless we track it.
+                target_user.role = RoleEnum.student
+                
     db.commit()
     return {"message": "Role updated"}
 

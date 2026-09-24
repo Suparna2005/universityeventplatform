@@ -7,12 +7,20 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import Profile from './pages/Profile';
 import ClubsDashboard from './pages/student/ClubsDashboard';
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
+const ProtectedRoute = ({ children, allowedRoles, adminOrClubAdmin }) => {
   const { user, loading } = useContext(AuthContext);
   if (loading) return <div>Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+
+  if (adminOrClubAdmin) {
+    if (!['admin', 'coordinator', 'finance'].includes(user.role) && !user.is_club_admin) {
+      return <Navigate to="/dashboard" replace />;
+    }
+    return children;
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    const fallback = user.role === 'student' ? "/dashboard" : "/admin";
+    const fallback = ['student', 'faculty', 'mentor'].includes(user.role) ? "/dashboard" : "/admin";
     return <Navigate to={fallback} replace />;
   }
   return children;
@@ -23,7 +31,7 @@ function AppRoutes() {
   
   const getHomeRoute = () => {
     if (!user) return "/login";
-    return user.role === 'student' ? "/dashboard" : "/admin";
+    return ['student', 'faculty', 'mentor'].includes(user.role) ? "/dashboard" : "/admin";
   };
 
   return (
@@ -31,8 +39,8 @@ function AppRoutes() {
       <Route path="/login" element={user ? <Navigate to={getHomeRoute()} /> : <Login />} />
       <Route path="/profile" element={user ? <Profile /> : <Navigate to="/login" />} />
       <Route path="/clubs" element={user ? <ClubsDashboard /> : <Navigate to="/login" />} />
-      <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student']}><Dashboard /></ProtectedRoute>} />
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'coordinator', 'finance', 'mentor', 'faculty']}><AdminDashboard /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute allowedRoles={['student', 'faculty', 'mentor']}><Dashboard /></ProtectedRoute>} />
+      <Route path="/admin" element={<ProtectedRoute adminOrClubAdmin={true}><AdminDashboard /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to={getHomeRoute()} replace />} />
     </Routes>
   );

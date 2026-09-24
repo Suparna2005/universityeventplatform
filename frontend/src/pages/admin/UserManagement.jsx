@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { UserPlus, Users, Search, Filter } from 'lucide-react';
-import { ConfirmModal } from '../../components/Modals';
+import { UserPlus, Users, Search, Filter, Award } from 'lucide-react';
+import { ConfirmModal, AlertModal } from '../../components/Modals';
 
-const UserManagement = () => {
+const UserManagement = ({ externalActiveTab }) => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -16,62 +16,70 @@ const UserManagement = () => {
   const [usersList, setUsersList] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [requestsError, setRequestsError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('coordinator');
+  const [activeTab, setActiveTab] = useState(externalActiveTab || 'coordinator');
   const baseURL = '';
   const [editingUserId, setEditingUserId] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
+  const [assignDept, setAssignDept] = useState('');
+  const [assignFacultyId, setAssignFacultyId] = useState('');
+
+  const showAlert = (message, isError = false) => {
+    setAlertModal({ isOpen: true, title: isError ? 'Error' : 'Success', message, isError });
+  };
+
+  useEffect(() => {
+    if (externalActiveTab) {
+      setActiveTab(externalActiveTab);
+    } else {
+      setActiveTab('coordinator');
+    }
+  }, [externalActiveTab]);
 
   useEffect(() => {
     fetchUsers();
   }, []);
 
   const fetchUsers = async () => {
-    try {
-      const res = await axios.get(`${baseURL}/api/admin/users`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      setUsersList(res.data);
-      
-      const reqRes = await axios.get(`${baseURL}/api/admin/club-requests`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      setPendingRequests(reqRes.data);
-
-      const leaveRes = await axios.get(`${baseURL}/api/admin/club-leave-requests`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      setPendingLeaveRequests(leaveRes.data);
-    } catch (err) {
-      console.error('Failed to fetch data', err);
+    setRequestsLoading(true);
+    setRequestsError('');
+    const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+    const [users, joins, leaves] = await Promise.allSettled([
+      axios.get(`${baseURL}/api/admin/users`, { headers }),
+      axios.get(`${baseURL}/api/admin/club-requests`, { headers }),
+      axios.get(`${baseURL}/api/admin/club-leave-requests`, { headers })
+    ]);
+    if (users.status === 'fulfilled') setUsersList(users.value.data);
+    if (joins.status === 'fulfilled') setPendingRequests(joins.value.data);
+    if (leaves.status === 'fulfilled') setPendingLeaveRequests(leaves.value.data);
+    const failedRequest = [joins, leaves].find(result => result.status === 'rejected');
+    if (failedRequest) {
+      setRequestsError(failedRequest.reason.response?.data?.detail || failedRequest.reason.message || 'Could not load pending requests');
     }
+    [users, joins, leaves].forEach(result => {
+      if (result.status === 'rejected') console.error('Failed to fetch admin data', result.reason);
+    });
+    setRequestsLoading(false);
   };
 
-  const handleApproveRequest = async (id, type="join") => {
+  const handleClubRequest = async (id, type, action) => {
     try {
-      const endpoint = type === 'join' ? 'club-requests' : 'club-leave-requests';
-      await axios.post(`${baseURL}/api/admin/${endpoint}/${id}/approve`, {}, {
+      const endpoint = type === 'leave' ? 'club-leave-requests' : 'club-requests';
+      await axios.post(`${baseURL}/api/admin/${endpoint}/${id}/${action}`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Approved successfully');
+      showAlert(action === 'approve' ? 'Request approved' : 'Request rejected');
       fetchUsers();
     } catch (err) {
-      alert('Error approving');
+      showAlert(err.response?.data?.detail || `Failed to ${action} request`, true);
     }
   };
 
-  const handleRejectRequest = async (id, type="join") => {
-    try {
-      const endpoint = type === 'join' ? 'club-requests' : 'club-leave-requests';
-      await axios.post(`${baseURL}/api/admin/${endpoint}/${id}/reject`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      alert('Rejected');
-      fetchUsers();
-    } catch (err) {
-      alert('Error rejecting');
-    }
-  };
+  const handleApproveRequest = (id, type = 'join') => handleClubRequest(id, type, 'approve');
+  const handleRejectRequest = (id, type = 'join') => handleClubRequest(id, type, 'reject');
 
   const handleEditClick = (user) => {
     setEditingUserId(user.id);
@@ -130,6 +138,32 @@ const UserManagement = () => {
       fetchUsers();
     } catch (err) {
       setError(err.response?.data?.detail || 'Error processing request');
+    }
+  };
+
+  const handleAssignCoordinator = async (e) => {
+    e.preventDefault();
+    if (!assignDept || !assignFacultyId) return;
+    
+    const targetUser = usersList.find(u => u.id.toString() === assignFacultyId.toString());
+    if (!targetUser) return;
+
+    try {
+      await axios.put(`${baseURL}/api/admin/users/${targetUser.id}`, {
+        name: targetUser.name,
+        email: targetUser.email,
+        password: '',
+        role: 'coordinator',
+        department: assignDept
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      showAlert(`Successfully promoted ${targetUser.name} to Department Coordinator!`);
+      setAssignDept('');
+      setAssignFacultyId('');
+      fetchUsers();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error promoting user');
     }
   };
 
@@ -275,18 +309,30 @@ const UserManagement = () => {
 
   const studentDepts = [...new Set(students.map(s => s.department).filter(Boolean))].sort();
 
+  const facultyRequests = pendingRequests.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase()));
+  const studentRequests = pendingRequests.filter(r => r.role && r.role.toLowerCase() === 'student');
+  const facultyLeaveRequests = pendingLeaveRequests.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase()));
+  const studentLeaveRequests = pendingLeaveRequests.filter(r => r.role && r.role.toLowerCase() === 'student');
+
   const tabs = [
-    { id: 'requests', label: 'Pending Requests', count: pendingRequests.length + pendingLeaveRequests.length },
     { id: 'coordinator', label: 'Dept Coordinators', count: coordinators.length },
     { id: 'club_coordinator', label: 'Club Coordinators', count: clubCoordinators.length },
     { id: 'finance', label: 'Finance', count: finance.length },
     { id: 'faculty', label: 'Faculty', count: faculty.length },
     { id: 'student', label: 'All Dept Students', count: students.length },
-    { id: 'admin', label: 'Admins', count: admins.length }
+    { id: 'admin', label: 'Admins', count: admins.length },
+    { id: 'requests_faculty', label: 'Faculty Requests', count: facultyRequests.length + facultyLeaveRequests.length },
+    { id: 'requests_student', label: 'Student Requests', count: studentRequests.length + studentLeaveRequests.length }
   ];
 
-  const renderRequestsTable = () => (
+  const renderRequestsTable = (tabType) => {
+    const isFaculty = tabType === 'requests_faculty';
+    const currentPendingJoin = isFaculty ? facultyRequests : studentRequests;
+    const currentPendingLeave = isFaculty ? facultyLeaveRequests : studentLeaveRequests;
+
+    return (
     <div style={{ overflowX: 'auto' }}>
+      {requestsError && <div role="alert" style={{ padding: '1rem', marginBottom: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '6px' }}>Could not load pending requests: {requestsError}</div>}
       <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-muted)' }}>
@@ -299,7 +345,7 @@ const UserManagement = () => {
           </tr>
         </thead>
         <tbody>
-          {pendingRequests.map(r => (
+          {currentPendingJoin.map(r => (
             <tr key={`join-${r.id}`} style={{ borderBottom: '1px solid var(--glass-border)' }}>
               <td style={{ padding: '1rem 0.5rem', fontWeight: 600, color: '#059669' }}>Join</td>
               <td style={{ padding: '1rem 0.5rem', fontWeight: 500 }}>{r.user_name}</td>
@@ -312,7 +358,7 @@ const UserManagement = () => {
               </td>
             </tr>
           ))}
-          {pendingLeaveRequests.map(r => (
+          {currentPendingLeave.map(r => (
             <tr key={`leave-${r.id}`} style={{ borderBottom: '1px solid var(--glass-border)' }}>
               <td style={{ padding: '1rem 0.5rem', fontWeight: 600, color: '#dc2626' }}>Leave</td>
               <td style={{ padding: '1rem 0.5rem', fontWeight: 500 }}>{r.user_name}</td>
@@ -325,20 +371,26 @@ const UserManagement = () => {
               </td>
             </tr>
           ))}
-          {(pendingRequests.length === 0 && pendingLeaveRequests.length === 0) && (
-            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'gray' }}>No pending club requests</td></tr>
+          {!requestsError && requestsLoading && currentPendingJoin.length === 0 && currentPendingLeave.length === 0 && (
+            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'gray' }}>Loading requests...</td></tr>
+          )}
+          {!requestsError && !requestsLoading && currentPendingJoin.length === 0 && currentPendingLeave.length === 0 && (
+            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'gray' }}>No pending club requests in this category</td></tr>
           )}
         </tbody>
       </table>
     </div>
-  );
+    );
+  };
 
   return (
     <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
       <ConfirmModal {...confirmModal} />
+      <AlertModal {...alertModal} onClose={() => setAlertModal({ ...alertModal, isOpen: false })} />
       {/* LEFT: Generation / Edit Form */}
-      <div className="glass-card" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '100px', height: 'fit-content' }}>
+        <div className="glass-card" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
           <UserPlus size={28} color="var(--primary)" />
           <h2 style={{ margin: 0, color: 'var(--primary)' }}>
             {editingUserId ? "Edit User" : "Generate User"}
@@ -374,20 +426,24 @@ const UserManagement = () => {
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>System Role</label>
-            <input 
-              list="role-options"
-              type="text"
+            <select 
               className="input-glass"
               required
               value={formData.role}
               onChange={e => setFormData({...formData, role: e.target.value})}
-              placeholder="Select existing or type a new role..."
-            />
-            <datalist id="role-options">
-              {[...new Set(["coordinator", "club_coordinator", "finance", "admin", ...usersList.map(u => u.role).filter(r => r !== 'student' && r !== 'faculty')])].sort().map(r => (
-                <option key={r} value={r} />
-              ))}
-            </datalist>
+            >
+              <option value="" disabled>Select a role...</option>
+              <option value="faculty">Faculty</option>
+              <option value="admin">Admin</option>
+              <option value="finance">Finance</option>
+              <option value="student">Student</option>
+              {editingUserId && (
+                <>
+                  <option value="coordinator">Department Coordinator</option>
+                  <option value="club_coordinator">Club Coordinator</option>
+                </>
+              )}
+            </select>
           </div>
 
           <div>
@@ -431,6 +487,46 @@ const UserManagement = () => {
             )}
           </div>
         </form>
+        </div>
+
+        {/* Assign Dept Coordinator Form */}
+        <div className="glass-card" style={{ padding: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+            <Award size={28} color="var(--primary)" />
+            <h2 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.4rem' }}>Assign Coordinator</h2>
+          </div>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+            Select an existing faculty member to promote them to Department Coordinator.
+          </p>
+          
+          <form onSubmit={handleAssignCoordinator} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Select Department</label>
+              <select className="input-glass" value={assignDept} onChange={e => {setAssignDept(e.target.value); setAssignFacultyId('');}} required>
+                <option value="" disabled>Choose Department...</option>
+                {[...new Set(["CSE", "ECE", "ME", "EE", "CE", "BBA", "BCA", ...usersList.map(u => u.department).filter(Boolean)])].sort().map(d => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+            
+            {assignDept && (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Select Faculty</label>
+                <select className="input-glass" value={assignFacultyId} onChange={e => setAssignFacultyId(e.target.value)} required>
+                  <option value="" disabled>Choose a faculty member...</option>
+                  {usersList.filter(u => (u.role === 'faculty' || u.role === 'coordinator') && u.department === assignDept).map(f => (
+                    <option key={f.id} value={f.id}>{f.name} ({f.email})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <button type="submit" className="btn-primary" style={{ padding: '0.8rem', marginTop: '0.5rem' }} disabled={!assignDept || !assignFacultyId}>
+              Promote to Coordinator
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* RIGHT: List of Users grouped by section */}
@@ -477,16 +573,24 @@ const UserManagement = () => {
                   fontSize: '0.9rem',
                   background: activeTab === tab.id ? 'var(--primary)' : 'transparent',
                   color: activeTab === tab.id ? 'white' : 'var(--text-muted)',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  position: 'relative'
                 }}
               >
                 {tab.label} <span style={{ opacity: 0.8, fontSize: '0.8rem' }}>({tab.count})</span>
+                {tab.id.startsWith('requests') && tab.count > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '-2px', right: '-2px', width: '12px', height: '12px', 
+                    background: '#ef4444', borderRadius: '50%', border: '2px solid white', 
+                    boxShadow: '0 0 5px rgba(239,68,68,0.5)'
+                  }}></span>
+                )}
               </button>
             ))}
           </div>
 
           {/* Table */}
-          {activeTab === 'requests' ? renderRequestsTable() : activeTab === 'student' ? renderStudentTableGrouped(activeUsers) : renderTable(activeUsers)}
+          {activeTab.startsWith('requests') ? renderRequestsTable(activeTab) : activeTab === 'student' ? renderStudentTableGrouped(activeUsers) : renderTable(activeUsers)}
         </div>
       </div>
     </div>

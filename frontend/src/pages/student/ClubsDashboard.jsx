@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { Users, Star, Trophy, Calendar, CheckCircle } from 'lucide-react';
-import { PromptModal, ConfirmModal } from '../../components/Modals';
+import { PromptModal, ConfirmModal, AlertModal } from '../../components/Modals';
 
 const ClubsDashboard = () => {
   const [clubs, setClubs] = useState([]);
@@ -15,6 +15,11 @@ const ClubsDashboard = () => {
   const [myMemberships, setMyMemberships] = useState([]);
   const [promptModal, setPromptModal] = useState({ isOpen: false, title: '', message: '', defaultValue: '', placeholder: '', onConfirm: null, onCancel: () => setPromptModal({ isOpen: false }) });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
+
+  const showAlert = (message, isError = false) => {
+    setAlertModal({ isOpen: true, title: isError ? 'Error' : 'Success', message, isError });
+  };
   
   const { user } = useContext(AuthContext);
   const baseURL = '';
@@ -69,12 +74,12 @@ const ClubsDashboard = () => {
         { message: joinMessage },
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );
-      alert('Join request sent successfully! Awaiting approval.');
+      showAlert('Join request sent successfully! Awaiting approval.');
       setSelectedClubForJoin(null);
       setJoinMessage('');
       fetchMyRequests();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to send join request. You may already be a member or have a pending request.'}`);
+      showAlert(`Error: ${err.response?.data?.detail || 'Failed to send join request. You may already be a member or have a pending request.'}`, true);
     }
   };
 
@@ -93,10 +98,10 @@ const ClubsDashboard = () => {
           await axios.post(`${baseURL}/api/clubs/${clubId}/leave`, { reason }, {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
-          alert('Leave request submitted. Awaiting approval.');
+          showAlert('Leave request submitted. Awaiting approval.');
           fetchMyRequests();
         } catch (err) {
-          alert(`Error: ${err.response?.data?.detail || 'You are not a member.'}`);
+          showAlert(`Error: ${err.response?.data?.detail || 'You are not a member.'}`, true);
         }
       }
     });
@@ -108,7 +113,7 @@ const ClubsDashboard = () => {
       setGalleryImages(res.data);
       setShowGallery(club);
     } catch (err) {
-      alert("Error loading gallery.");
+      showAlert("Error loading gallery.", true);
     }
   };
 
@@ -123,11 +128,11 @@ const ClubsDashboard = () => {
       await axios.post(`${baseURL}/api/clubs/${showGallery.id}/gallery`, formData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' }
       });
-      alert('Photo uploaded successfully!');
+      showAlert('Photo uploaded successfully!');
       // refresh gallery
       viewGallery(showGallery);
     } catch (err) {
-      alert(`Error uploading photo: ${err.response?.data?.detail || err.message}`);
+      showAlert(`Error uploading photo: ${err.response?.data?.detail || err.message}`, true);
     }
   };
 
@@ -147,10 +152,10 @@ const ClubsDashboard = () => {
             type === 'join' ? { message: newValue } : { reason: newValue },
             { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
           );
-          alert('Request updated successfully.');
+          showAlert('Request updated successfully.');
           fetchMyRequests();
         } catch (err) {
-          alert('Error updating request');
+          showAlert('Error updating request', true);
         }
       }
     });
@@ -170,10 +175,10 @@ const ClubsDashboard = () => {
           await axios.delete(`${baseURL}/api/clubs/${type}-requests/${reqId}`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
-          alert('Request withdrawn.');
+          showAlert('Request withdrawn.');
           fetchMyRequests();
         } catch (err) {
-          alert('Error withdrawing request');
+          showAlert('Error withdrawing request', true);
         }
       }
     });
@@ -223,6 +228,7 @@ const ClubsDashboard = () => {
         <h2 style={{ fontSize: '2rem', margin: 0 }}>University Clubs Directory</h2>
       </div>
 
+      <AlertModal {...alertModal} onClose={() => setAlertModal({ ...alertModal, isOpen: false })} />
       <PromptModal {...promptModal} />
       <ConfirmModal {...confirmModal} />
 

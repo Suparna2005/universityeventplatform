@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     gender: Optional[str] = None
     year: Optional[int] = None
     section: Optional[str] = None
+    is_club_admin: Optional[bool] = False
 
 class ForgotPasswordRequest(BaseModel):
     email: str

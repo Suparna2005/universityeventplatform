@@ -56,8 +56,8 @@ def create_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role != RoleEnum.coordinator:
-        raise HTTPException(status_code=403, detail="Only coordinators can schedule programs")
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.faculty]:
+        raise HTTPException(status_code=403, detail="Only coordinators or faculty can schedule programs")
         
     from datetime import datetime
     # Removed past date restriction for easier testing
@@ -102,8 +102,8 @@ def update_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
-        raise HTTPException(status_code=403, detail="Only coordinators or admins can edit programs")
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin, RoleEnum.faculty]:
+        raise HTTPException(status_code=403, detail="Only coordinators, faculty, or admins can edit programs")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -141,7 +141,7 @@ def delete_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.faculty]:
         raise HTTPException(status_code=403, detail="Not authorized to delete events")
         
     event = db.query(Event).filter(Event.id == event_id).first()

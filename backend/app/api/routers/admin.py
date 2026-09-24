@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.event import Event, EventState
@@ -23,7 +23,6 @@ class AdminUserCreate(BaseModel):
     role: str
     department: str = ""
 
-from fastapi import BackgroundTasks
 from app.core.email import send_student_credentials_email
 
 @router.post("/users")
@@ -97,6 +96,26 @@ def delete_user(user_id: int, current_user: User = Depends(get_current_user), db
     db.commit()
     return {"message": "User deleted successfully"}
 
+@router.put("/users/{user_id}/role")
+def update_user_role(user_id: int, role_data: dict = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    new_role = role_data.get("role")
+    department = role_data.get("department")
+    
+    if new_role:
+        target.role = new_role
+    if department:
+        target.department = department
+        
+    db.commit()
+    return {"message": "User role updated successfully"}
+
 @router.get("/users")
 def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.admin:
@@ -112,7 +131,8 @@ def get_all_users(current_user: User = Depends(get_current_user), db: Session = 
         for m in memberships:
             club = db.query(Club).filter(Club.id == m.club_id).first()
             if club:
-                clubs_list.append({"club_id": club.id, "club_name": club.name, "role": m.role.value})
+                role_val = m.role.value if hasattr(m.role, 'value') else str(m.role)
+                clubs_list.append({"club_id": club.id, "club_name": club.name, "role": role_val})
         
         result.append({
             "id": u.id,
@@ -126,30 +146,9 @@ def get_all_users(current_user: User = Depends(get_current_user), db: Session = 
         
     return result
 
-from app.models.user import ClubJoinRequest, Club
-@router.get("/club-requests")
-def get_pending_club_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-        
-    requests = db.query(ClubJoinRequest).filter(ClubJoinRequest.status == "pending_admin").all()
-    result = []
-    for req in requests:
-        user = db.query(User).filter(User.id == req.user_id).first()
-        club = db.query(Club).filter(Club.id == req.club_id).first()
-        result.append({
-            "id": req.id,
-            "user_name": user.name if user else "Unknown",
-            "user_email": user.email if user else "Unknown",
-            "club_name": club.name if club else "Unknown",
-            "message": req.message,
-            "created_at": req.created_at
-        })
-    return result
-
 @router.get("/programs")
 def get_admin_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.finance]:
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.finance, RoleEnum.faculty, RoleEnum.mentor]:
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     try:
@@ -189,7 +188,7 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
                 organizers = [
                     {
                         "name": membership.user.name,
-                        "role": membership.role.value,
+                        "role": membership.role.value if hasattr(membership.role, 'value') else str(membership.role),
                     }
                     for membership in memberships
                     if membership.user
@@ -638,11 +637,14 @@ def list_admin_club_requests(current_user: User = Depends(get_current_user), db:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
     # Get faculty pending requests, OR student requests forwarded by coordinator
-    from sqlalchemy import or_, and_
+    from sqlalchemy import or_, and_, func
     reqs = db.query(ClubJoinRequest).join(User).filter(
         or_(
             ClubJoinRequest.status == JoinRequestStatus.pending_admin,
-            and_(ClubJoinRequest.status == JoinRequestStatus.pending, User.role == RoleEnum.faculty)
+            and_(
+                ClubJoinRequest.status == JoinRequestStatus.pending,
+                func.lower(User.role).in_(["faculty", "coordinator", "club_coordinator"]),
+            ),
         )
     ).all()
     
@@ -699,11 +701,14 @@ def list_admin_club_leave_requests(current_user: User = Depends(get_current_user
     if current_user.role != RoleEnum.admin:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
-    from sqlalchemy import or_, and_
+    from sqlalchemy import or_, and_, func
     reqs = db.query(ClubLeaveRequest).join(User).filter(
         or_(
             ClubLeaveRequest.status == "pending_admin",
-            and_(ClubLeaveRequest.status == "pending", User.role == RoleEnum.faculty)
+            and_(
+                ClubLeaveRequest.status == "pending",
+                func.lower(User.role).in_(["faculty", "coordinator", "club_coordinator"]),
+            ),
         )
     ).all()
     

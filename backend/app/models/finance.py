@@ -36,7 +36,8 @@ class Feedback(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=True) # Legacy
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     rating = Column(Integer, nullable=False)  # 1 to 5
     comment = Column(String, nullable=True)
     sentiment_score = Column(String, nullable=True) # positive, negative, neutral

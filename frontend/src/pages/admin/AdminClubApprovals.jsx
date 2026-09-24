@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { ShieldCheck } from 'lucide-react';
+import { AlertModal } from '../../components/Modals';
 
 const AdminClubApprovals = () => {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   const baseURL = '';
+
+  const showAlert = (message, isError = false) => {
+    setAlertModal({ isOpen: true, title: isError ? 'Error' : 'Success', message, isError });
+  };
 
   useEffect(() => {
     fetchRequests();
@@ -29,10 +35,10 @@ const AdminClubApprovals = () => {
       await axios.post(`${baseURL}/api/clubs/requests/${reqId}/approve`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Club membership generated successfully!');
+      showAlert('Club membership generated successfully!');
       fetchRequests();
     } catch (err) {
-      alert(`Error approving request: ${err.response?.data?.detail || err.message}`);
+      showAlert(`Error approving request: ${err.response?.data?.detail || err.message}`, true);
     }
   };
 
@@ -41,10 +47,10 @@ const AdminClubApprovals = () => {
       await axios.post(`${baseURL}/api/clubs/requests/${reqId}/reject`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Request rejected.');
+      showAlert('Request rejected.');
       fetchRequests();
     } catch (err) {
-      alert(`Error rejecting request: ${err.response?.data?.detail || err.message}`);
+      showAlert(`Error rejecting request: ${err.response?.data?.detail || err.message}`, true);
     }
   };
 
@@ -82,6 +88,8 @@ const AdminClubApprovals = () => {
           ))}
         </div>
       )}
+      
+      <AlertModal {...alertModal} onClose={() => setAlertModal({ ...alertModal, isOpen: false })} />
     </div>
   );
 };

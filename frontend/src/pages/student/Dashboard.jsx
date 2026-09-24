@@ -6,6 +6,7 @@ import { Brain, UserCircle, CalendarDays, MapPin, Users, Search, Building2, Spar
 
 const Dashboard = () => {
   const [events, setEvents] = useState([]);
+  const [clubsList, setClubsList] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [myRegistrations, setMyRegistrations] = useState({});
   const [myCertificates, setMyCertificates] = useState({});
@@ -21,14 +22,16 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [eventsRes, regRes, recRes, certRes] = await Promise.all([
+      const [eventsRes, regRes, recRes, certRes, clubsRes] = await Promise.all([
         axios.get(`${baseURL}/api/events`),
         user.role === 'student' ? axios.get(`${baseURL}/api/events/me/registrations`) : Promise.resolve({data: []}),
         user.role === 'student' ? axios.get(`${baseURL}/api/events/me/recommendations`) : Promise.resolve({data: []}),
-        user.role === 'student' ? axios.get(`${baseURL}/api/certificates/me`) : Promise.resolve({data: []})
+        user.role === 'student' ? axios.get(`${baseURL}/api/certificates/me`) : Promise.resolve({data: []}),
+        axios.get(`${baseURL}/api/clubs/list`)
       ]);
       
       setEvents(eventsRes.data);
+      setClubsList(clubsRes.data);
       setRecommendations(recRes.data);
       
       const regMap = {};
@@ -153,6 +156,11 @@ const Dashboard = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          {user.is_club_admin && (
+            <button onClick={() => navigate('/admin')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a' }}>
+              Coordinator Portal
+            </button>
+          )}
           <button onClick={() => navigate('/clubs')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--secondary)' }}>
             <Building2 size={20} /> Browse Clubs
           </button>
@@ -199,17 +207,16 @@ const Dashboard = () => {
           <div style={{ marginBottom: '1.25rem' }}>
             <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Event discovery</p>
             <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#0f172a', letterSpacing: '-0.03em' }}>Find your next campus event</h2>
-            <p style={{ color: '#64748b', margin: '0.5rem 0 0', lineHeight: 1.6 }}>Browse events from {user.department || user.student_profile?.department || 'your department'}, other departments, and university clubs.</p>
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
             <label style={{ flex: '1 1 280px', display: 'flex', alignItems: 'center', gap: '0.6rem', border: '1px solid #dbe2ea', borderRadius: '10px', padding: '0 0.85rem', background: 'white' }}>
               <Search size={18} color="#64748b" />
-              <input type="search" aria-label="Search events" placeholder="Search events, clubs, or departments" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ border: 0, outline: 0, width: '100%', padding: '0.8rem 0', font: 'inherit', background: 'transparent' }} />
+              <input type="search" aria-label="Search events" placeholder="Search clubs and events" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ border: 0, outline: 0, width: '100%', padding: '0.8rem 0', font: 'inherit', background: 'transparent' }} />
             </label>
             <select aria-label="Filter by club" value={filterClub} onChange={e => setFilterClub(e.target.value)} className="input-glass" style={{ flex: '0 1 230px', background: 'white' }}>
               <option value="">All clubs</option>
-              {[...new Set(events.map(e => e.club_name))].sort().map(club => <option key={club} value={club}>{club}</option>)}
+              {clubsList.map(club => <option key={club.id} value={club.name}>{club.name}</option>)}
             </select>
           </div>
 
@@ -250,7 +257,7 @@ const Dashboard = () => {
                       <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><Sparkles size={16} color="#64748b" />{event.club_name}{event.host_department ? ` · ${event.host_department}` : ''}</span>
                       <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><Users size={16} color="#64748b" />{event.registered_count} registered · {event.capacity} seats</span>
                     </div>
-                    {user.role === 'student' && (
+                    {user.role === 'student' ? (
                       <div style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
                         {myRegistrations[event.id] ? (
                           <>
@@ -260,6 +267,12 @@ const Dashboard = () => {
                           </>
                         ) : <button onClick={() => handleRegister(event.id)} className="btn-primary" style={{ width: '100%', padding: '0.7rem' }}>Register for event</button>}
                       </div>
+                    ) : (
+                      event.state === 'completed' && (
+                        <div style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
+                          <button onClick={() => setFeedbackModal({ isOpen: true, eventId: event.id, rating: 5, comment: '' })} className="btn-secondary" style={{ padding: '0.65rem', width: '100%' }}>Submit Feedback</button>
+                        </div>
+                      )
                     )}
                   </article>
                 );
