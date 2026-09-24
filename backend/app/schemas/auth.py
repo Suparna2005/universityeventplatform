@@ -17,6 +17,10 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 class UserResponse(BaseModel):
     id: int
     email: str
@@ -27,3 +31,16 @@ class UserResponse(BaseModel):
     phone_number: Optional[str] = None
     department: Optional[str] = None
     gender: Optional[str] = None
+    year: Optional[int] = None
+    section: Optional[str] = None
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class AccountRequestCreate(BaseModel):
+    name: str
+    email: str
+    requested_role: str
+    department: str
+    year: Optional[int] = None
+    section: Optional[str] = None

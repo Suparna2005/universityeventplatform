@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UserPlus, Users, Search, Filter } from 'lucide-react';
+import { ConfirmModal } from '../../components/Modals';
 
 const UserManagement = () => {
   const [formData, setFormData] = useState({
@@ -13,10 +14,13 @@ const UserManagement = () => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [usersList, setUsersList] = useState([]);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('coordinator');
   const baseURL = '';
   const [editingUserId, setEditingUserId] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
 
   useEffect(() => {
     fetchUsers();
@@ -28,8 +32,44 @@ const UserManagement = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setUsersList(res.data);
+      
+      const reqRes = await axios.get(`${baseURL}/api/admin/club-requests`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setPendingRequests(reqRes.data);
+
+      const leaveRes = await axios.get(`${baseURL}/api/admin/club-leave-requests`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setPendingLeaveRequests(leaveRes.data);
     } catch (err) {
-      console.error('Failed to fetch users', err);
+      console.error('Failed to fetch data', err);
+    }
+  };
+
+  const handleApproveRequest = async (id, type="join") => {
+    try {
+      const endpoint = type === 'join' ? 'club-requests' : 'club-leave-requests';
+      await axios.post(`${baseURL}/api/admin/${endpoint}/${id}/approve`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      alert('Approved successfully');
+      fetchUsers();
+    } catch (err) {
+      alert('Error approving');
+    }
+  };
+
+  const handleRejectRequest = async (id, type="join") => {
+    try {
+      const endpoint = type === 'join' ? 'club-requests' : 'club-leave-requests';
+      await axios.post(`${baseURL}/api/admin/${endpoint}/${id}/reject`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      alert('Rejected');
+      fetchUsers();
+    } catch (err) {
+      alert('Error rejecting');
     }
   };
 
@@ -46,17 +86,27 @@ const UserManagement = () => {
     setError('');
   };
 
-  const handleDeleteClick = async (userId) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
-    try {
-      await axios.delete(`${baseURL}/api/admin/users/${userId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      setMessage('User deleted successfully.');
-      fetchUsers();
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Error deleting user');
-    }
+  const handleDeleteClick = (userId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete User',
+      message: 'Are you sure you want to delete this user?',
+      confirmText: 'Delete',
+      confirmColor: '#dc2626',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.delete(`${baseURL}/api/admin/users/${userId}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          setMessage('User deleted successfully.');
+          fetchUsers();
+        } catch (err) {
+          setError(err.response?.data?.detail || 'Error deleting user');
+        }
+      }
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -226,6 +276,7 @@ const UserManagement = () => {
   const studentDepts = [...new Set(students.map(s => s.department).filter(Boolean))].sort();
 
   const tabs = [
+    { id: 'requests', label: 'Pending Requests', count: pendingRequests.length + pendingLeaveRequests.length },
     { id: 'coordinator', label: 'Dept Coordinators', count: coordinators.length },
     { id: 'club_coordinator', label: 'Club Coordinators', count: clubCoordinators.length },
     { id: 'finance', label: 'Finance', count: finance.length },
@@ -234,9 +285,57 @@ const UserManagement = () => {
     { id: 'admin', label: 'Admins', count: admins.length }
   ];
 
+  const renderRequestsTable = () => (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+        <thead>
+          <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-muted)' }}>
+            <th style={{ padding: '1rem 0.5rem' }}>Type</th>
+            <th style={{ padding: '1rem 0.5rem' }}>User Name</th>
+            <th style={{ padding: '1rem 0.5rem' }}>System Role</th>
+            <th style={{ padding: '1rem 0.5rem' }}>Club Name</th>
+            <th style={{ padding: '1rem 0.5rem' }}>Message/Reason</th>
+            <th style={{ padding: '1rem 0.5rem', textAlign: 'right' }}>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pendingRequests.map(r => (
+            <tr key={`join-${r.id}`} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+              <td style={{ padding: '1rem 0.5rem', fontWeight: 600, color: '#059669' }}>Join</td>
+              <td style={{ padding: '1rem 0.5rem', fontWeight: 500 }}>{r.user_name}</td>
+              <td style={{ padding: '1rem 0.5rem', textTransform: 'capitalize' }}>{r.role || 'Unknown'}</td>
+              <td style={{ padding: '1rem 0.5rem', color: 'var(--primary)', fontWeight: 600 }}>{r.club_name}</td>
+              <td style={{ padding: '1rem 0.5rem', color: 'gray' }}>{r.message}</td>
+              <td style={{ padding: '1rem 0.5rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button onClick={() => handleApproveRequest(r.id, 'join')} style={{ padding: '0.4rem 0.8rem', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Approve</button>
+                <button onClick={() => handleRejectRequest(r.id, 'join')} style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
+              </td>
+            </tr>
+          ))}
+          {pendingLeaveRequests.map(r => (
+            <tr key={`leave-${r.id}`} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+              <td style={{ padding: '1rem 0.5rem', fontWeight: 600, color: '#dc2626' }}>Leave</td>
+              <td style={{ padding: '1rem 0.5rem', fontWeight: 500 }}>{r.user_name}</td>
+              <td style={{ padding: '1rem 0.5rem', textTransform: 'capitalize' }}>{r.role || 'Unknown'}</td>
+              <td style={{ padding: '1rem 0.5rem', color: 'var(--primary)', fontWeight: 600 }}>{r.club_name}</td>
+              <td style={{ padding: '1rem 0.5rem', color: 'gray' }}>{r.message}</td>
+              <td style={{ padding: '1rem 0.5rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button onClick={() => handleApproveRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Approve</button>
+                <button onClick={() => handleRejectRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
+              </td>
+            </tr>
+          ))}
+          {(pendingRequests.length === 0 && pendingLeaveRequests.length === 0) && (
+            <tr><td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'gray' }}>No pending club requests</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
-      
+      <ConfirmModal {...confirmModal} />
       {/* LEFT: Generation / Edit Form */}
       <div className="glass-card" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -387,7 +486,7 @@ const UserManagement = () => {
           </div>
 
           {/* Table */}
-          {activeTab === 'student' ? renderStudentTableGrouped(activeUsers) : renderTable(activeUsers)}
+          {activeTab === 'requests' ? renderRequestsTable() : activeTab === 'student' ? renderStudentTableGrouped(activeUsers) : renderTable(activeUsers)}
         </div>
       </div>
     </div>

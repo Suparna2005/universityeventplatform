@@ -65,6 +65,8 @@ class Student(Base):
     student_number = Column(String, unique=True, index=True, nullable=False)
     department = Column(String)
     semester = Column(Integer)
+    year = Column(Integer)
+    section = Column(String)
 
     user = relationship("User", back_populates="student_profile")
     registrations = relationship("Registration", back_populates="student")
@@ -140,3 +142,21 @@ class ClubLeaveRequest(Base):
 
     user = relationship("User")
     club = relationship("Club")
+
+class AccountRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+class AccountRequest(Base):
+    __tablename__ = "account_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    requested_role = Column(String, nullable=False) # 'student' or 'faculty'
+    department = Column(String, nullable=False)
+    year = Column(Integer, nullable=True) # For students
+    section = Column(String, nullable=True) # For students
+    status = Column(Enum(AccountRequestStatus), default=AccountRequestStatus.pending, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)

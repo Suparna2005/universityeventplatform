@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import ChangePasswordModal from './ChangePasswordModal';
 
 const Profile = () => {
   const { user, setUser } = useContext(AuthContext);
@@ -18,6 +19,7 @@ const Profile = () => {
   const [profilePicture, setProfilePicture] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -143,9 +145,16 @@ const Profile = () => {
             <button type="submit" className="btn-primary" style={{ marginTop: '1rem' }} disabled={loading}>
               {loading ? 'Saving...' : 'Save Changes'}
             </button>
+            <button type="button" className="btn-secondary" style={{ marginTop: '0.5rem' }} onClick={() => setShowChangePassword(true)}>
+              Change Password
+            </button>
           </form>
         </div>
       </div>
+      
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 };

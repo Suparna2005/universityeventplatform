@@ -449,6 +449,27 @@ def verify_expenses(event_id: int, current_user: User = Depends(get_current_user
     event.state = EventState.completed
     db.commit()
     return {"message": "Expenses verified, event officially marked as completed!"}
+
+from fastapi.responses import StreamingResponse
+
+@router.get("/events/csv/template/expenses")
+def get_expenses_csv_template():
+    content = "Item Description,Amount,Category,Date,Notes\nDecorations,500,Decor,2024-01-01,Balloons and banners\nSnacks,1500,Food,2024-01-01,Refreshments for participants"
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=expenses_template.csv"}
+    )
+
+@router.get("/events/csv/template/attendance")
+def get_attendance_csv_template():
+    content = "Student Number,Name,Email,Status\nSTU-0001,John Doe,john@example.com,Present\nSTU-0002,Jane Smith,jane@example.com,Present"
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=attendance_template.csv"}
+    )
+
 @router.post("/events/{event_id}/upload-expenses")
 async def upload_expenses_csv(event_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
@@ -608,3 +629,121 @@ def recommend_requirements(title: str = "", description: str = "", req_type: str
 
     # Format output
     return {"recommendation": ", ".join(recommendations)}
+
+from app.models.user import ClubJoinRequest, JoinRequestStatus, ClubMembership, ClubMemberRole, Club
+
+@router.get("/club-requests")
+def list_admin_club_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    # Get faculty pending requests, OR student requests forwarded by coordinator
+    from sqlalchemy import or_, and_
+    reqs = db.query(ClubJoinRequest).join(User).filter(
+        or_(
+            ClubJoinRequest.status == JoinRequestStatus.pending_admin,
+            and_(ClubJoinRequest.status == JoinRequestStatus.pending, User.role == RoleEnum.faculty)
+        )
+    ).all()
+    
+    result = []
+    for r in reqs:
+        club = db.query(Club).filter(Club.id == r.club_id).first()
+        result.append({
+            "id": r.id,
+            "user_name": r.user.name if r.user else "Unknown",
+            "club_name": club.name if club else "Unknown",
+            "message": r.message,
+            "role": r.user.role if r.user else "Unknown"
+        })
+    return result
+
+@router.post("/club-requests/{req_id}/approve")
+def approve_admin_club_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    req.status = JoinRequestStatus.approved
+    
+    existing = db.query(ClubMembership).filter(ClubMembership.club_id == req.club_id, ClubMembership.user_id == req.user_id).first()
+    if not existing:
+        new_membership = ClubMembership(
+            club_id=req.club_id,
+            user_id=req.user_id,
+            role=ClubMemberRole.member
+        )
+        db.add(new_membership)
+        
+    db.commit()
+    return {"message": "Request approved"}
+
+@router.post("/club-requests/{req_id}/reject")
+def reject_admin_club_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    req.status = JoinRequestStatus.rejected
+    db.commit()
+    return {"message": "Request rejected"}
+
+from app.models.user import ClubLeaveRequest
+
+@router.get("/club-leave-requests")
+def list_admin_club_leave_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    from sqlalchemy import or_, and_
+    reqs = db.query(ClubLeaveRequest).join(User).filter(
+        or_(
+            ClubLeaveRequest.status == "pending_admin",
+            and_(ClubLeaveRequest.status == "pending", User.role == RoleEnum.faculty)
+        )
+    ).all()
+    
+    result = []
+    for r in reqs:
+        club = db.query(Club).filter(Club.id == r.club_id).first()
+        result.append({
+            "id": r.id,
+            "user_name": r.user.name if r.user else "Unknown",
+            "club_name": club.name if club else "Unknown",
+            "message": r.reason,
+            "role": r.user.role if r.user else "Unknown"
+        })
+    return result
+
+@router.post("/club-leave-requests/{req_id}/approve")
+def approve_admin_club_leave_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    req = db.query(ClubLeaveRequest).filter(ClubLeaveRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    req.status = "approved"
+    
+    membership = db.query(ClubMembership).filter(ClubMembership.club_id == req.club_id, ClubMembership.user_id == req.user_id).first()
+    if membership:
+        db.delete(membership)
+        
+    db.commit()
+    return {"message": "Leave request approved and membership removed"}
+
+@router.post("/club-leave-requests/{req_id}/reject")
+def reject_admin_club_leave_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    req = db.query(ClubLeaveRequest).filter(ClubLeaveRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    req.status = "rejected"
+    db.commit()
+    return {"message": "Leave request rejected"}

@@ -11,7 +11,7 @@ class ClubBase(BaseModel):
     department: Optional[str] = None
 
 class ClubCreate(ClubBase):
-    pass
+    coordinator_email: Optional[str] = None
 
 class ClubResponse(ClubBase):
     id: int
@@ -67,3 +67,6 @@ class ClubMemberAdd(BaseModel):
     email: str
     role: ClubMemberRole
     club_department: Optional[str] = None
+    name: Optional[str] = None
+    system_role: Optional[str] = "student"
+    department: Optional[str] = None

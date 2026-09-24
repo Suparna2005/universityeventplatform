@@ -55,8 +55,6 @@ const Dashboard = () => {
 
   const categoryOptions = [
     { id: 'all', label: 'All events' },
-    { id: 'my_department', label: 'My department' },
-    { id: 'other_departments', label: 'Other departments' },
     { id: 'university_clubs', label: 'University clubs' },
   ];
   const visibleEvents = events.filter(event => {
@@ -154,7 +152,10 @@ const Dashboard = () => {
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>Welcome back, {user.name} ({user.role})</p>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <button onClick={() => navigate('/clubs')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--secondary)' }}>
+            <Building2 size={20} /> Browse Clubs
+          </button>
           <button onClick={() => navigate('/profile')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <UserCircle size={20} /> My Profile
           </button>

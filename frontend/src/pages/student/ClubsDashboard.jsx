@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { Users, Star, Trophy, Calendar, CheckCircle } from 'lucide-react';
+import { PromptModal, ConfirmModal } from '../../components/Modals';
 
 const ClubsDashboard = () => {
   const [clubs, setClubs] = useState([]);
@@ -12,14 +13,19 @@ const ClubsDashboard = () => {
   const [showGallery, setShowGallery] = useState(null);
   const [galleryImages, setGalleryImages] = useState([]);
   const [myMemberships, setMyMemberships] = useState([]);
+  const [promptModal, setPromptModal] = useState({ isOpen: false, title: '', message: '', defaultValue: '', placeholder: '', onConfirm: null, onCancel: () => setPromptModal({ isOpen: false }) });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
   
   const { user } = useContext(AuthContext);
   const baseURL = '';
+
+  const [myRequests, setMyRequests] = useState({ join_requests: [], leave_requests: [] });
 
   useEffect(() => {
     fetchClubs();
     if (user) {
       fetchMyMemberships();
+      fetchMyRequests();
     }
   }, [user]);
 
@@ -31,6 +37,17 @@ const ClubsDashboard = () => {
       setMyMemberships(res.data);
     } catch (err) {
       console.error('Failed to fetch memberships', err);
+    }
+  };
+
+  const fetchMyRequests = async () => {
+    try {
+      const res = await axios.get(`${baseURL}/api/clubs/my-requests`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setMyRequests(res.data);
+    } catch (err) {
+      console.error('Failed to fetch requests', err);
     }
   };
 
@@ -52,24 +69,37 @@ const ClubsDashboard = () => {
         { message: joinMessage },
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );
-      alert('Join request sent successfully! Awaiting approval from the Club President.');
+      alert('Join request sent successfully! Awaiting approval.');
       setSelectedClubForJoin(null);
       setJoinMessage('');
+      fetchMyRequests();
     } catch (err) {
       alert(`Error: ${err.response?.data?.detail || 'Failed to send join request. You may already be a member or have a pending request.'}`);
     }
   };
 
-  const handleLeaveClub = async (clubId) => {
-    if (!window.confirm("Are you sure you want to leave this club?")) return;
-    try {
-      await axios.delete(`${baseURL}/api/clubs/${clubId}/leave`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      alert('You have successfully left the club.');
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'You are not a member.'}`);
-    }
+  const handleLeaveClub = (clubId) => {
+    setPromptModal({
+      isOpen: true,
+      title: 'Leave Club',
+      message: 'Why do you want to leave this club? (Reason required)',
+      placeholder: 'Type your reason here...',
+      defaultValue: '',
+      onCancel: () => setPromptModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async (reason) => {
+        setPromptModal(prev => ({ ...prev, isOpen: false }));
+        if (!reason) return;
+        try {
+          await axios.post(`${baseURL}/api/clubs/${clubId}/leave`, { reason }, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          alert('Leave request submitted. Awaiting approval.');
+          fetchMyRequests();
+        } catch (err) {
+          alert(`Error: ${err.response?.data?.detail || 'You are not a member.'}`);
+        }
+      }
+    });
   };
 
   const viewGallery = async (club) => {
@@ -101,15 +131,100 @@ const ClubsDashboard = () => {
     }
   };
 
+  const handleEditRequest = (reqId, type, currentValue) => {
+    setPromptModal({
+      isOpen: true,
+      title: `Edit ${type === 'join' ? 'Message' : 'Reason'}`,
+      defaultValue: currentValue,
+      placeholder: 'Type your message...',
+      onCancel: () => setPromptModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async (newValue) => {
+        setPromptModal(prev => ({ ...prev, isOpen: false }));
+        if (!newValue || newValue === currentValue) return;
+
+        try {
+          await axios.put(`${baseURL}/api/clubs/${type}-requests/${reqId}`, 
+            type === 'join' ? { message: newValue } : { reason: newValue },
+            { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+          );
+          alert('Request updated successfully.');
+          fetchMyRequests();
+        } catch (err) {
+          alert('Error updating request');
+        }
+      }
+    });
+  };
+
+  const handleWithdrawRequest = (reqId, type) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Withdraw Request',
+      message: 'Are you sure you want to withdraw this request?',
+      confirmText: 'Withdraw',
+      confirmColor: '#dc2626',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.delete(`${baseURL}/api/clubs/${type}-requests/${reqId}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          alert('Request withdrawn.');
+          fetchMyRequests();
+        } catch (err) {
+          alert('Error withdrawing request');
+        }
+      }
+    });
+  };
+
   if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>Loading Clubs Directory...</div>;
 
   return (
     <div className="animate-fade-in" style={{ padding: '2rem' }}>
       
+      {(myRequests.join_requests.length > 0 || myRequests.leave_requests.length > 0) && (
+        <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', border: '2px solid var(--primary)' }}>
+          <h3 style={{ margin: '0 0 1rem 0', color: 'var(--primary)' }}>My Pending Requests</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+            {myRequests.join_requests.filter(r => r.status.startsWith('pending')).map(r => (
+              <div key={`join-${r.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.5)', padding: '0.8rem', borderRadius: '6px' }}>
+                <div>
+                  <strong>Join Request:</strong> {r.club_name}
+                  <span className="badge badge-warning" style={{ marginLeft: '1rem' }}>{r.status === 'pending_admin' ? 'Awaiting Admin' : 'Awaiting Coordinator'}</span>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'gray' }}>Message: {r.message}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => handleEditRequest(r.id, 'join', r.message)} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}>Edit</button>
+                  <button onClick={() => handleWithdrawRequest(r.id, 'join')} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none' }}>Withdraw</button>
+                </div>
+              </div>
+            ))}
+            {myRequests.leave_requests.filter(r => r.status.startsWith('pending')).map(r => (
+              <div key={`leave-${r.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.5)', padding: '0.8rem', borderRadius: '6px' }}>
+                <div>
+                  <strong>Leave Request:</strong> {r.club_name}
+                  <span className="badge badge-warning" style={{ marginLeft: '1rem' }}>{r.status === 'pending_admin' ? 'Awaiting Admin' : 'Awaiting Coordinator'}</span>
+                  <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.85rem', color: 'gray' }}>Reason: {r.reason}</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button onClick={() => handleEditRequest(r.id, 'leave', r.reason)} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem' }}>Edit</button>
+                  <button onClick={() => handleWithdrawRequest(r.id, 'leave')} className="btn-secondary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none' }}>Withdraw</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
         <Users size={32} color="var(--primary)" />
         <h2 style={{ fontSize: '2rem', margin: 0 }}>University Clubs Directory</h2>
       </div>
+
+      <PromptModal {...promptModal} />
+      <ConfirmModal {...confirmModal} />
 
       <p style={{ color: 'var(--text-muted)', marginBottom: '3rem', fontSize: '1.1rem', maxWidth: '800px' }}>
         Discover and join various communities! Faculties, Mentors, and Students from any department are welcome to join and contribute. Find a club that matches your passion below.
@@ -217,22 +332,62 @@ const ClubsDashboard = () => {
             <h3 style={{ marginBottom: '1rem', fontSize: '1.5rem', color: 'var(--primary)' }}>
               Join {clubs.find(c => c.id === selectedClubForJoin)?.name}
             </h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-              Introduce yourself! Let the club head know which department you are from and why you want to join.
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+              {user.role === 'student' 
+                ? "Your request will be sent to your Department Coordinator for approval. Please confirm your details below." 
+                : "Your request will be sent to the Admin for approval. Please confirm your details below."}
             </p>
             
             <form onSubmit={handleJoinRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label>Message / Introduction</label>
-                <textarea 
-                  value={joinMessage} 
-                  onChange={e => setJoinMessage(e.target.value)}
-                  className="input-glass"
-                  rows="4"
-                  placeholder="I am a faculty/student from the IT department and I'm interested in..."
-                  required
-                />
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'gray' }}>Full Name</label>
+                  <input type="text" className="input-glass" readOnly value={user?.name || ''} style={{ background: '#f8fafc', color: 'gray' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'gray' }}>Email ID</label>
+                  <input type="email" className="input-glass" readOnly value={user?.email || ''} style={{ background: '#f8fafc', color: 'gray' }} />
+                </div>
               </div>
+
+              {user.role === 'student' && (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', color: 'gray' }}>Department</label>
+                      <input type="text" className="input-glass" readOnly value={user?.department || 'N/A'} style={{ background: '#f8fafc', color: 'gray' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', color: 'gray' }}>Section / Year</label>
+                      <input type="text" className="input-glass" readOnly value={`${user?.section || 'N/A'} / Year ${user?.year || 'N/A'}`} style={{ background: '#f8fafc', color: 'gray' }} />
+                    </div>
+                  </div>
+                  <textarea 
+                    style={{ marginTop: '0.5rem' }}
+                    onChange={e => setJoinMessage(e.target.value)}
+                    className="input-glass"
+                    rows="2"
+                    placeholder="Briefly describe your interest in joining..."
+                    required
+                  />
+                </>
+              )}
+
+              {user.role === 'faculty' && (
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: 'gray' }}>Department</label>
+                  <input type="text" className="input-glass" readOnly value={user?.department || 'N/A'} style={{ background: '#f8fafc', color: 'gray' }} />
+                  <textarea 
+                    style={{ marginTop: '1rem' }}
+                    onChange={e => setJoinMessage(e.target.value)}
+                    className="input-glass"
+                    rows="2"
+                    placeholder="Briefly describe your interest in joining..."
+                    required
+                  />
+                </div>
+              )}
               
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                 <button type="submit" className="btn-primary" style={{ flex: 1 }}>Send Request</button>

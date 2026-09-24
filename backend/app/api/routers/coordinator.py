@@ -83,6 +83,105 @@ def update_student(student_id: int, request: CoordinatorStudentUpdate, current_u
     db.commit()
     return {"message": "Student updated successfully"}
 
+from app.models.user import ClubJoinRequest, JoinRequestStatus, ClubMembership, ClubMemberRole, Club
+
+@router.get("/student-club-requests")
+def list_student_club_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    reqs = db.query(ClubJoinRequest).join(User).filter(
+        ClubJoinRequest.status == JoinRequestStatus.pending,
+        User.role == RoleEnum.student,
+        User.department == current_user.department
+    ).all()
+    
+    result = []
+    for r in reqs:
+        club = db.query(Club).filter(Club.id == r.club_id).first()
+        result.append({
+            "id": r.id,
+            "user_name": r.user.name if r.user else "Unknown",
+            "club_name": club.name if club else "Unknown",
+            "message": r.message
+        })
+    return result
+
+@router.post("/student-club-requests/{req_id}/forward")
+def forward_student_club_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    req.status = JoinRequestStatus.pending_admin
+        
+    db.commit()
+    return {"message": "Request forwarded to Admin for final approval"}
+
+@router.post("/student-club-requests/{req_id}/reject")
+def reject_student_club_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    req.status = JoinRequestStatus.rejected
+    db.commit()
+    return {"message": "Request rejected"}
+
+from app.models.user import ClubLeaveRequest
+
+@router.get("/student-leave-requests")
+def list_student_leave_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    reqs = db.query(ClubLeaveRequest).join(User).filter(
+        ClubLeaveRequest.status == "pending",
+        User.role == RoleEnum.student,
+        User.department == current_user.department
+    ).all()
+    
+    result = []
+    for r in reqs:
+        club = db.query(Club).filter(Club.id == r.club_id).first()
+        result.append({
+            "id": r.id,
+            "user_name": r.user.name if r.user else "Unknown",
+            "club_name": club.name if club else "Unknown",
+            "message": r.reason
+        })
+    return result
+
+@router.post("/student-leave-requests/{req_id}/forward")
+def forward_student_leave_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    req = db.query(ClubLeaveRequest).filter(ClubLeaveRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+        
+    req.status = "pending_admin"
+        
+    db.commit()
+    return {"message": "Leave request forwarded to Admin for final approval"}
+
+@router.post("/student-leave-requests/{req_id}/reject")
+def reject_student_leave_request(req_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.coordinator:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    req = db.query(ClubLeaveRequest).filter(ClubLeaveRequest.id == req_id).first()
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    req.status = "rejected"
+    db.commit()
+    return {"message": "Leave request rejected"}
+
+
 @router.delete("/students/{student_id}")
 def delete_student(student_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.coordinator:
@@ -106,6 +205,17 @@ import csv
 import io
 import secrets
 from fastapi import File, UploadFile
+
+from fastapi.responses import StreamingResponse
+
+@router.get("/students/csv/template")
+def get_students_csv_template():
+    content = "name,email,password,year,section\nAlice Brown,alice@example.com,secret123,1,A\nBob Smith,bob@example.com,,2,B"
+    return StreamingResponse(
+        iter([content]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=students_template.csv"}
+    )
 
 @router.post("/students/csv")
 async def upload_students_csv(background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

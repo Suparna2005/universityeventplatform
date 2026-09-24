@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UserPlus, Users, Search } from 'lucide-react';
+import { ConfirmModal } from '../../components/Modals';
 
 const StudentManagement = () => {
   const [formData, setFormData] = useState({
@@ -14,7 +15,10 @@ const StudentManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingUserId, setEditingUserId] = useState(null);
   const baseURL = '';
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
 
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
   useEffect(() => {
@@ -27,8 +31,44 @@ const StudentManagement = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       setStudentsList(res.data);
+      
+      const reqRes = await axios.get(`${baseURL}/api/coordinator/student-club-requests`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setPendingRequests(reqRes.data);
+
+      const leaveRes = await axios.get(`${baseURL}/api/coordinator/student-leave-requests`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setPendingLeaveRequests(leaveRes.data);
     } catch (err) {
       console.error('Failed to fetch students', err);
+    }
+  };
+
+  const handleForwardRequest = async (id, type="join") => {
+    try {
+      const endpoint = type === 'join' ? 'student-club-requests' : 'student-leave-requests';
+      const res = await axios.post(`${baseURL}/api/coordinator/${endpoint}/${id}/forward`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      alert(res.data.message || 'Forwarded successfully.');
+      fetchStudents();
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error forwarding request');
+    }
+  };
+
+  const handleRejectRequest = async (id, type="join") => {
+    try {
+      const endpoint = type === 'join' ? 'student-club-requests' : 'student-leave-requests';
+      await axios.post(`${baseURL}/api/coordinator/${endpoint}/${id}/reject`, {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      alert('Request rejected.');
+      fetchStudents();
+    } catch (err) {
+      alert('Error rejecting request');
     }
   };
 
@@ -92,16 +132,26 @@ const StudentManagement = () => {
     setError('');
   };
 
-  const handleDeleteClick = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this student?")) return;
-    try {
-      await axios.delete(`${baseURL}/api/coordinator/students/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      fetchStudents();
-    } catch (err) {
-      alert(`Error deleting student: ${err.response?.data?.detail || err.message}`);
-    }
+  const handleDeleteClick = (id) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Student',
+      message: 'Are you sure you want to delete this student?',
+      confirmText: 'Delete',
+      confirmColor: '#dc2626',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.delete(`${baseURL}/api/coordinator/students/${id}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          fetchStudents();
+        } catch (err) {
+          alert(`Error deleting student: ${err.response?.data?.detail || err.message}`);
+        }
+      }
+    });
   };
 
   const searchedStudents = studentsList.filter(u => 
@@ -111,7 +161,7 @@ const StudentManagement = () => {
 
   return (
     <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
-      
+      <ConfirmModal {...confirmModal} />
       {/* LEFT: Generation Form */}
       <div className="glass-card" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -155,7 +205,10 @@ const StudentManagement = () => {
 
         {!editingUserId && (
           <div style={{ borderTop: '2px dashed var(--glass-border)', paddingTop: '2rem' }}>
-            <h3 style={{ margin: '0 0 1rem 0' }}>Bulk Upload via CSV</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ margin: 0 }}>Bulk Upload via CSV</h3>
+              <a href={`${baseURL}/api/coordinator/students/csv/template`} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'underline' }}>Download CSV Template</a>
+            </div>
             <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Upload a CSV with columns: <strong>name, email, password, year, section</strong></p>
             <form onSubmit={handleBulkUpload} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <input type="file" accept=".csv" required onChange={e => setCsvFile(e.target.files[0])} className="input-glass" />
@@ -166,13 +219,78 @@ const StudentManagement = () => {
       </div>
 
       {/* RIGHT: List of Students */}
-      <div className="glass-card" style={{ padding: '2rem', height: 'fit-content' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Users size={28} color="var(--primary)" />
-            <h2 style={{ margin: 0, color: 'var(--primary)' }}>My Department Students ({studentsList.length})</h2>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        
+        {/* Pending Requests */}
+        {pendingRequests.length > 0 && (
+          <div className="glass-card" style={{ padding: '2rem', border: '2px solid var(--primary)' }}>
+            <h2 style={{ margin: '0 0 1rem 0', color: 'var(--primary)' }}>Pending Club Join Requests ({pendingRequests.length})</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '0.5rem' }}>Student Name</th>
+                    <th style={{ padding: '0.5rem' }}>Club Name</th>
+                    <th style={{ padding: '0.5rem' }}>Message</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingRequests.map(r => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: 500 }}>{r.user_name}</td>
+                      <td style={{ padding: '0.5rem', color: 'var(--primary)', fontWeight: 600 }}>{r.club_name}</td>
+                      <td style={{ padding: '0.5rem', color: 'gray' }}>{r.message}</td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                        <button onClick={() => handleForwardRequest(r.id)} style={{ padding: '0.4rem 0.8rem', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Forward to Admin</button>
+                        <button onClick={() => handleRejectRequest(r.id)} style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-          <div style={{ position: 'relative', width: '300px' }}>
+        )}
+
+        {pendingLeaveRequests.length > 0 && (
+          <div className="glass-card" style={{ padding: '2rem', border: '2px solid var(--primary)' }}>
+            <h2 style={{ margin: '0 0 1rem 0', color: 'var(--primary)' }}>Pending Club Leave Requests ({pendingLeaveRequests.length})</h2>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '0.5rem' }}>Student Name</th>
+                    <th style={{ padding: '0.5rem' }}>Club Name</th>
+                    <th style={{ padding: '0.5rem' }}>Reason</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingLeaveRequests.map(r => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid var(--glass-border)' }}>
+                      <td style={{ padding: '0.5rem', fontWeight: 500 }}>{r.user_name}</td>
+                      <td style={{ padding: '0.5rem', color: 'var(--primary)', fontWeight: 600 }}>{r.club_name}</td>
+                      <td style={{ padding: '0.5rem', color: 'gray' }}>{r.message}</td>
+                      <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                        <button onClick={() => handleForwardRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Forward to Admin</button>
+                        <button onClick={() => handleRejectRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="glass-card" style={{ padding: '2rem', height: 'fit-content' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <Users size={28} color="var(--primary)" />
+              <h2 style={{ margin: 0, color: 'var(--primary)' }}>My Department Students ({studentsList.length})</h2>
+            </div>
+            <div style={{ position: 'relative', width: '300px' }}>
             <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input 
               type="text" 
@@ -227,6 +345,7 @@ const StudentManagement = () => {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );

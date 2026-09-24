@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { Users, Edit2, Check, X, Trash2 } from 'lucide-react';
+import { ConfirmModal } from '../../components/Modals';
 
 const ClubManagement = () => {
   const [clubs, setClubs] = useState([]);
@@ -10,6 +11,7 @@ const ClubManagement = () => {
   const [joinRequests, setJoinRequests] = useState([]);
   const [showRequests, setShowRequests] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
   
   // Edit State
   const [editingMember, setEditingMember] = useState(null);
@@ -41,7 +43,7 @@ const ClubManagement = () => {
   };
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newClubData, setNewClubData] = useState({ name: '', description: '', club_type: 'university', department: '' });
+  const [newClubData, setNewClubData] = useState({ name: '', description: '', club_type: 'university', department: '', coordinator_email: '' });
 
   const handleCreateClubSubmit = async (e) => {
     e.preventDefault();
@@ -49,9 +51,12 @@ const ClubManagement = () => {
       await axios.post(`${baseURL}/api/clubs/`, newClubData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Club created successfully!');
+      const successMessage = newClubData.coordinator_email && newClubData.coordinator_email.trim() !== ''
+        ? 'Club created successfully! Coordinator has been notified via email.'
+        : 'Club created successfully!';
+      alert(successMessage);
       setShowCreateModal(false);
-      setNewClubData({ name: '', description: '', club_type: 'university', department: '' });
+      setNewClubData({ name: '', description: '', club_type: 'university', department: '', coordinator_email: '' });
       fetchClubs();
     } catch (err) {
       alert(`Error creating club: ${err.response?.data?.detail || err.message}`);
@@ -181,35 +186,81 @@ const ClubManagement = () => {
     }
   };
 
-  const handleRemoveMember = async (userId) => {
-    if (!window.confirm("Are you sure you want to remove this member from the club?")) return;
-    try {
-      await axios.delete(`${baseURL}/api/clubs/${selectedClub}/members/${userId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      setMembers(members.filter(m => m.user_id !== userId));
-    } catch (err) {
-      alert(`Error removing member: ${err.response?.data?.detail || err.message}`);
-    }
+  const handleRemoveMember = (userId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Member',
+      message: 'Are you sure you want to remove this member from the club?',
+      confirmText: 'Remove',
+      confirmColor: '#dc2626',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.delete(`${baseURL}/api/clubs/${selectedClub}/members/${userId}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+          });
+          setMembers(members.filter(m => m.user_id !== userId));
+        } catch (err) {
+          alert(`Error removing member: ${err.response?.data?.detail || err.message}`);
+        }
+      }
+    });
   };
 
-  const handleAddMember = async () => {
-    const email = window.prompt("Enter the exact email address of the user to add:");
-    if (!email) return;
-    const role = window.prompt("Enter role (member, core, head, president). Note: If they are a Coordinator, this will be auto-detected:", "member");
-    if (!role) return;
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [manualAddData, setManualAddData] = useState({
+    email: '',
+    role: 'member',
+    name: '',
+    system_role: 'student',
+    department: ''
+  });
+  const [csvFile, setCsvFile] = useState(null);
+
+  const handleAddMemberManual = async (e) => {
+    e.preventDefault();
+    if (!manualAddData.email) return;
     try {
       await axios.post(`${baseURL}/api/clubs/${selectedClub}/members/add`, {
-        email: email,
-        role: role.toLowerCase(),
+        email: manualAddData.email,
+        role: manualAddData.role.toLowerCase(),
+        name: manualAddData.name,
+        system_role: manualAddData.system_role,
+        department: manualAddData.department,
         club_department: ""
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       alert('Member added successfully!');
-      handleSelectClub(selectedClub); // refresh members
+      handleSelectClub(selectedClub);
+      setShowAddMemberModal(false);
+      setManualAddData({ email: '', role: 'member', name: '', system_role: 'student', department: '' });
     } catch (err) {
       alert(`Error adding member: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
+  const handleBulkUploadMembers = async (e) => {
+    e.preventDefault();
+    if (!csvFile) return;
+    
+    const form = new FormData();
+    form.append('file', csvFile);
+
+    try {
+      const res = await axios.post(`${baseURL}/api/clubs/${selectedClub}/members/csv`, form, {
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      alert(res.data.message || 'Members imported successfully.');
+      setCsvFile(null);
+      setShowAddMemberModal(false);
+      handleSelectClub(selectedClub);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Error uploading CSV');
     }
   };
 
@@ -217,6 +268,7 @@ const ClubManagement = () => {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+      <ConfirmModal {...confirmModal} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
         <Users size={32} color="var(--primary)" />
         <h2 style={{ fontSize: '2rem', margin: 0 }}>Club Management</h2>
@@ -239,28 +291,13 @@ const ClubManagement = () => {
                 <form onSubmit={handleCreateClubSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <input type="text" className="input-glass" placeholder="Club Name" required value={newClubData.name} onChange={e => setNewClubData({...newClubData, name: e.target.value})} />
                   <input type="text" className="input-glass" placeholder="Description" required value={newClubData.description} onChange={e => setNewClubData({...newClubData, description: e.target.value})} />
-                  <select className="input-glass" value={newClubData.club_type} onChange={e => setNewClubData({...newClubData, club_type: e.target.value, department: e.target.value === 'university' ? '' : newClubData.department})}>
-                    <option value="university">University Club (All Departments)</option>
-                    <option value="departmental">Departmental Club</option>
-                  </select>
-                  {newClubData.club_type === 'departmental' && (
-                    <>
-                      <input 
-                        list="club-dept-options"
-                        type="text"
-                        className="input-glass"
-                        required
-                        value={newClubData.department}
-                        onChange={e => setNewClubData({...newClubData, department: e.target.value})}
-                        placeholder="Select existing or type a new one..."
-                      />
-                      <datalist id="club-dept-options">
-                        {[...new Set(["CSE", "ECE", "ME", "EE", "CE", "BBA", "BCA", ...clubs.map(c => c.department).filter(Boolean)])].sort().map(d => (
-                          <option key={d} value={d} />
-                        ))}
-                      </datalist>
-                    </>
-                  )}
+                  <input 
+                    type="email" 
+                    className="input-glass" 
+                    placeholder="Club Coordinator Email (Optional)" 
+                    value={newClubData.coordinator_email} 
+                    onChange={e => setNewClubData({...newClubData, coordinator_email: e.target.value})} 
+                  />
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                     <button type="submit" className="btn-primary" style={{ flex: 1 }}>Create</button>
                     <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowCreateModal(false)}>Cancel</button>
@@ -306,19 +343,118 @@ const ClubManagement = () => {
                   )}
                   <span className="badge badge-secondary">{members.length} Total Members</span>
                   {user?.role === 'admin' && (
-                    <button onClick={handleAddMember} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
+                    <button onClick={() => setShowAddMemberModal(true)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
                       + Add Member
                     </button>
                   )}
-                  <button onClick={handleExportCSV} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
-                    Export CSV
-                  </button>
+
                   <label className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer', margin: 0 }}>
                     Upload Photo
                     <input type="file" style={{ display: 'none' }} accept="image/*" onChange={handleGalleryUpload} />
                   </label>
                 </div>
               </div>
+
+              {showAddMemberModal && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                  <div className="glass-card" style={{ padding: '2rem', width: '500px', background: 'white' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                      <h3 style={{ margin: 0 }}>Add Club Members</h3>
+                      <button onClick={() => setShowAddMemberModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>✖</button>
+                    </div>
+
+                    {/* Manual Add Form */}
+                    <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e5e7eb' }}>
+                      <h4 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Option 1: Add by Email</h4>
+                      <form onSubmit={handleAddMemberManual} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <div>
+                          <label style={{ fontSize: '0.85rem' }}>Full Name (required for new users):</label>
+                          <input type="text" className="input-glass" placeholder="John Doe" value={manualAddData.name} onChange={(e) => setManualAddData({...manualAddData, name: e.target.value})} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.85rem' }}>User Email (Required):</label>
+                          <input 
+                            type="email" 
+                            required 
+                            className="input-glass" 
+                            placeholder="e.g. student@university.edu" 
+                            value={manualAddData.email} 
+                            onChange={(e) => setManualAddData({...manualAddData, email: e.target.value})}
+                            onBlur={async (e) => {
+                              if (!e.target.value) return;
+                              try {
+                                const res = await axios.get(`${baseURL}/api/clubs/lookup-user?email=${e.target.value}`, {
+                                  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+                                });
+                                if (res.data.exists) {
+                                  setManualAddData(prev => ({
+                                    ...prev,
+                                    name: res.data.name,
+                                    system_role: res.data.role,
+                                    department: res.data.department || ''
+                                  }));
+                                }
+                              } catch (err) {}
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.85rem' }}>System Role (Auto-fetched if user exists):</label>
+                          <select className="input-glass" value={manualAddData.system_role} onChange={(e) => setManualAddData({...manualAddData, system_role: e.target.value})}>
+                            <option value="student">Student</option>
+                            <option value="faculty">Faculty</option>
+                            <option value="coordinator">Department Coordinator</option>
+                            <option value="club_coordinator">Club Coordinator</option>
+                            <option value="finance">Finance</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.85rem' }}>Department (if new user):</label>
+                          <input type="text" className="input-glass" placeholder="e.g. CSE" value={manualAddData.department} onChange={(e) => setManualAddData({...manualAddData, department: e.target.value})} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.85rem' }}>Club Role:</label>
+                          <select className="input-glass" value={manualAddData.role} onChange={(e) => setManualAddData({...manualAddData, role: e.target.value})}>
+                            <option value="member">Member</option>
+                            <option value="core">Core</option>
+                            <option value="head">Head</option>
+                            <option value="president">President</option>
+                            <option value="club_coordinator">Club Coordinator</option>
+                          </select>
+                        </div>
+                        <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem' }}>Add Single Member</button>
+                      </form>
+                    </div>
+
+                    {/* Bulk Upload Form */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '1rem' }}>Option 2: Bulk Import (CSV)</h4>
+                        <a href={`${baseURL}/api/clubs/${selectedClub}/members/csv/template`} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: 'var(--primary)', textDecoration: 'underline' }}>
+                          Download CSV Template
+                        </a>
+                      </div>
+                      <form onSubmit={handleBulkUploadMembers} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        <input 
+                          type="file" 
+                          accept=".csv"
+                          required
+                          onChange={(e) => setCsvFile(e.target.files[0])}
+                          className="input-glass"
+                          style={{ padding: '0.5rem' }}
+                        />
+                        <button type="submit" className="btn-secondary" style={{ marginTop: '0.5rem' }}>
+                          Upload & Import Members
+                        </button>
+                      </form>
+                      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                        * The system will automatically create accounts for new users and email them their login credentials. They will also be added directly to this club.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {showRequests && joinRequests.length > 0 && (
                 <div style={{ background: '#fef3c7', padding: '1.5rem', borderRadius: '8px', marginBottom: '2rem' }}>
@@ -347,7 +483,8 @@ const ClubManagement = () => {
                       <tr style={{ borderBottom: '2px solid rgba(0,0,0,0.1)' }}>
                         <th style={{ padding: '1rem' }}>Name</th>
                         <th style={{ padding: '1rem' }}>Email</th>
-                        <th style={{ padding: '1rem' }}>Role</th>
+                        <th style={{ padding: '1rem' }}>System Role</th>
+                        <th style={{ padding: '1rem' }}>Club Role</th>
                         <th style={{ padding: '1rem' }}>Department</th>
                         <th style={{ padding: '1rem' }}>Points</th>
                         <th style={{ padding: '1rem', textAlign: 'right' }}>Actions</th>
@@ -374,7 +511,14 @@ const ClubManagement = () => {
                             )}
                           </td>
                           
-                          {/* Role Column */}
+                          {/* System Role Column */}
+                          <td style={{ padding: '1rem' }}>
+                            <span style={{ textTransform: 'capitalize', color: 'gray' }}>
+                              {member.global_role?.replace('_', ' ')}
+                            </span>
+                          </td>
+
+                          {/* Club Role Column */}
                           <td style={{ padding: '1rem' }}>
                             {editingMember === member.id ? (
                               <select 

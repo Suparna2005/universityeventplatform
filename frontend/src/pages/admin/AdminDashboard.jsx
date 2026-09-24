@@ -11,6 +11,8 @@ import ClubsDashboard from '../student/ClubsDashboard';
 import UserManagement from './UserManagement';
 import AdminClubApprovals from './AdminClubApprovals';
 import StudentManagement from './StudentManagement';
+import ChangePasswordModal from '../ChangePasswordModal';
+import { PromptModal, ConfirmModal } from '../../components/Modals';
 
 const getEventTimelineStatus = (event) => {
   if (event.state === 'completed') return 'Completed';
@@ -31,6 +33,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [scanningEventId, setScanningEventId] = useState(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   
   const [aiPrompts, setAiPrompts] = useState({});
   const [aiLoading, setAiLoading] = useState({});
@@ -49,6 +52,9 @@ const AdminDashboard = () => {
   const [eventFeedback, setEventFeedback] = useState([]);
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [aiRecommendReqLoading, setAiRecommendReqLoading] = useState(false);
+
+  const [promptModal, setPromptModal] = useState({ isOpen: false, title: '', message: '', defaultValue: '', placeholder: '', onConfirm: null, onCancel: () => setPromptModal({ isOpen: false }) });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -208,16 +214,11 @@ const AdminDashboard = () => {
         name: newClubName,
         description: "Official University Club"
       }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert('Club added successfully! Redirecting to Schedule Program...');
+      alert('Club added successfully!');
       setNewClubName('');
       
       // Instantly update local state to ensure it's in the dropdown immediately
       setClubs(prev => [...prev, { id: res.data.id, name: res.data.name }]);
-      
-      // Auto-select and redirect to Schedule Program
-      setNewEvent(prev => ({...prev, club_id: res.data.id}));
-      setActiveMenu('Events');
-      setActiveSubMenu('events_create');
       
       await fetchAdminData(); // Refresh the rest of the data
     } catch (err) {
@@ -237,15 +238,25 @@ const AdminDashboard = () => {
     }
   };
 
-  const handleDeleteClub = async (clubId) => {
-    if (!window.confirm("Are you sure you want to delete this club? Events associated with it may cause deletion to fail.")) return;
-    try {
-      await axios.delete(`${baseURL}/api/clubs/${clubId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert("Club deleted successfully!");
-      await fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to delete club'}`);
-    }
+  const handleDeleteClub = (clubId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Club',
+      message: 'Are you sure you want to delete this club? Events associated with it may cause deletion to fail.',
+      confirmText: 'Delete',
+      confirmColor: '#dc2626',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.delete(`${baseURL}/api/clubs/${clubId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          alert("Club deleted successfully!");
+          await fetchAdminData();
+        } catch (err) {
+          alert(`Error: ${err.response?.data?.detail || 'Failed to delete club'}`);
+        }
+      }
+    });
   };
 
   const handleEditClick = (event) => {
@@ -270,101 +281,201 @@ const AdminDashboard = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDeleteEvent = async (eventId) => {
-    if (!window.confirm("Are you sure you want to delete this program?")) return;
-    try {
-      await axios.delete(`${baseURL}/api/events/${eventId}`);
-      alert("Event deleted successfully!");
-      fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to delete event'}`);
-    }
+  const handleDeleteEvent = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Event',
+      message: 'Are you sure you want to delete this program?',
+      confirmText: 'Delete',
+      confirmColor: '#dc2626',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.delete(`${baseURL}/api/events/${eventId}`);
+          alert("Event deleted successfully!");
+          fetchAdminData();
+        } catch (err) {
+          alert(`Error: ${err.response?.data?.detail || 'Failed to delete event'}`);
+        }
+      }
+    });
   };
 
 
-  const handleRequestChanges = async (eventId) => {
-    const reason = window.prompt("Enter the reason for requesting changes (this will be sent to the Coordinator):");
-    if (!reason) return;
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/request-changes`, { reason }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert("Changes requested! Event sent back to Coordinator.");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handleRequestChanges = (eventId) => {
+    setPromptModal({
+      isOpen: true,
+      title: 'Request Changes',
+      message: 'Enter the reason for requesting changes (this will be sent to the Coordinator):',
+      placeholder: 'Reason for changes...',
+      defaultValue: '',
+      onCancel: () => setPromptModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async (reason) => {
+        setPromptModal(prev => ({ ...prev, isOpen: false }));
+        if (!reason) return;
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/request-changes`, { reason }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          alert("Changes requested! Event sent back to Coordinator.");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
-  const handleRejectEvent = async (eventId) => {
-    const reason = window.prompt("Enter the reason for permanent rejection:");
-    if (!reason) return;
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/reject`, { reason }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert("Event rejected permanently.");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handleRejectEvent = (eventId) => {
+    setPromptModal({
+      isOpen: true,
+      title: 'Reject Event',
+      message: 'Enter the reason for permanent rejection:',
+      placeholder: 'Reason for rejection...',
+      defaultValue: '',
+      onCancel: () => setPromptModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async (reason) => {
+        setPromptModal(prev => ({ ...prev, isOpen: false }));
+        if (!reason) return;
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/reject`, { reason }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          alert("Event rejected permanently.");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
-  const handleVerifyExpenses = async (eventId) => {
-    try {
-      const response = await axios.put(`${baseURL}/api/admin/events/${eventId}/verify-expenses`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert(response.data.message || "Expenses verified! Event is now completed.");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handleVerifyExpenses = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Verify Expenses',
+      message: 'Are you sure you want to verify these expenses? This will complete the event workflow.',
+      confirmText: 'Verify',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          const response = await axios.put(`${baseURL}/api/admin/events/${eventId}/verify-expenses`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          alert(response.data.message || "Expenses verified! Event is now completed.");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
-  const handleApproveAdminInitial = async (eventId) => {
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-initial`);
-      alert("Budget request sent to Finance successfully!");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handleApproveAdminInitial = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Approve & Send to Finance',
+      message: 'Are you sure you want to forward this budget request to the Finance team?',
+      confirmText: 'Approve',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-initial`);
+          alert("Budget request sent to Finance successfully!");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
-  const handleApproveBudget = async (eventId) => {
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-budget`);
-      alert("Budget approved! Sent back to Admin.");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handleApproveBudget = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Approve Budget',
+      message: 'Are you sure you want to approve this budget?',
+      confirmText: 'Approve',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-budget`);
+          alert("Budget approved! Sent back to Admin.");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
-  const handleApproveAdminFinal = async (eventId) => {
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-final`);
-      alert("Final approval sent to Coordinator!");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handleApproveAdminFinal = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Final Approval',
+      message: 'Are you sure you want to give final approval for this event?',
+      confirmText: 'Approve',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-final`);
+          alert("Final approval sent to Coordinator!");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
 
-  const handlePublishEvent = async (eventId) => {
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/publish`);
-      alert("Event published to Students successfully!");
-      fetchAdminData();
-    } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+  const handlePublishEvent = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Publish Event',
+      message: 'Are you sure you want to publish this event for all students to see?',
+      confirmText: 'Publish',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/publish`);
+          alert("Event published to Students successfully!");
+          fetchAdminData();
+        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+      }
+    });
   };
 
-  const handleCloseEvent = async (eventId) => {
-    const expenses = window.prompt("Enter the actual total expenses (in ₹). (Leave blank if you uploaded a CSV)");
-    const parsedExpenses = parseInt(expenses);
-    const finalExpenses = isNaN(parsedExpenses) ? 0 : parsedExpenses;
+  const handleCloseEvent = (eventId) => {
+    setPromptModal({
+      isOpen: true,
+      title: 'Close Event',
+      message: 'Enter the actual total expenses (in ₹). (Leave blank if you uploaded a CSV)',
+      placeholder: 'e.g. 5000',
+      defaultValue: '',
+      onCancel: () => setPromptModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async (expenses) => {
+        setPromptModal(prev => ({ ...prev, isOpen: false }));
+        const parsedExpenses = parseInt(expenses);
+        const finalExpenses = isNaN(parsedExpenses) ? 0 : parsedExpenses;
 
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/close`, { actual_expenses: finalExpenses }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert("Event closed successfully! Expense report sent to Finance.");
-      fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to close event'}`);
-    }
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/close`, { actual_expenses: finalExpenses }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          alert("Event closed successfully! Expense report sent to Finance.");
+          fetchAdminData();
+        } catch (err) {
+          alert(`Error: ${err.response?.data?.detail || 'Failed to close event'}`);
+        }
+      }
+    });
   };
 
-  const handleApproveCompletion = async (eventId) => {
-    try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-completion`);
-      alert("Event completion approved successfully!");
-      fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to approve event completion'}`);
-    }
+  const handleApproveCompletion = (eventId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Approve Completion',
+      message: 'Are you sure you want to approve this event\'s completion?',
+      confirmText: 'Approve',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        try {
+          await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-completion`);
+          alert("Event completion approved successfully!");
+          fetchAdminData();
+        } catch (err) {
+          alert(`Error: ${err.response?.data?.detail || 'Failed to approve event completion'}`);
+        }
+      }
+    });
   };
 
 
@@ -464,6 +575,7 @@ const AdminDashboard = () => {
         {
           category: 'Account',
           items: [
+            { id: 'account_password', label: 'Change Password' },
             { id: 'account_signout', label: 'Sign Out' },
           ]
         }
@@ -479,6 +591,7 @@ const AdminDashboard = () => {
         {
           category: 'Account',
           items: [
+            { id: 'account_password', label: 'Change Password' },
             { id: 'account_signout', label: 'Sign Out' },
           ]
         }
@@ -518,6 +631,7 @@ const AdminDashboard = () => {
         {
           category: 'Account',
           items: [
+            { id: 'account_password', label: 'Change Password' },
             { id: 'account_signout', label: 'Sign Out' },
           ]
         }
@@ -528,6 +642,11 @@ const AdminDashboard = () => {
   const menuStructure = getMenuStructure();
 
   const handleSidebarClick = (menu, subMenu) => {
+    if (subMenu === 'account_password') {
+      setShowChangePassword(true);
+      return;
+    }
+
     setActiveMenu(menu);
     setActiveSubMenu(subMenu);
     
@@ -597,6 +716,9 @@ const AdminDashboard = () => {
 
   return (
     <div className="corporate-theme" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-gradient)' }}>
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
       
       {/* Sidebar Navigation */}
       <aside style={{ width: '280px', background: 'var(--glass-bg)', borderRight: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
@@ -641,6 +763,8 @@ const AdminDashboard = () => {
 
       {/* Main Content Area */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
+        <PromptModal {...promptModal} />
+        <ConfirmModal {...confirmModal} />
         
         {/* Top Header */}
         <header style={{ background: 'white', padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -687,7 +811,7 @@ const AdminDashboard = () => {
           )}
 
           {/* Club Management View */}
-          {(activeSubMenu === 'admin_clubs_all' || activeSubMenu === 'clubs_manage') && (
+          {['club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage'].includes(activeSubMenu) && (
             <ClubManagement />
           )}
 
@@ -1113,7 +1237,10 @@ const AdminDashboard = () => {
                       {/* Upload Expense CSV (Coordinator) */}
                       {['published', 'finance_review', 'completed'].includes(event.state) && (
                         <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>📤 Upload Expense CSV for Finance (Optional):</label>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>📤 Upload Expense CSV for Finance (Optional):</label>
+                            <a href={`${baseURL}/api/admin/events/csv/template/expenses`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}>Download Template</a>
+                          </div>
                           <input 
                             type="file" 
                             accept=".csv"
@@ -1146,7 +1273,10 @@ const AdminDashboard = () => {
                       {/* Upload Attendance File */}
                       {['published', 'finance_review', 'pending_completion', 'completed'].includes(event.state) && (
                         <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>🏆 Upload Final Results (CSV for Certificates):</label>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>🏆 Upload Final Results (CSV for Certificates):</label>
+                            <a href={`${baseURL}/api/admin/events/csv/template/attendance`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}>Download Template</a>
+                          </div>
                           <input 
                             type="file" 
                             accept=".csv"
@@ -1209,85 +1339,7 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {/* Club Profile & Management View */}
-          {['club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage'].includes(activeSubMenu) && (
-            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              <div className="glass-card" style={{ padding: '2rem' }}>
-                <h3 style={{ marginBottom: '1.5rem', color: 'var(--secondary)' }}>Add New Club</h3>
-                <form onSubmit={handleCreateClub} style={{ display: 'flex', gap: '1rem' }}>
-                  <input 
-                    type="text" 
-                    className="input-glass" 
-                    placeholder="Enter New Club Name (e.g., Robotics Club)" 
-                    value={newClubName} 
-                    onChange={e => setNewClubName(e.target.value)} 
-                    required 
-                    style={{ flex: 1 }}
-                  />
-                  <button type="submit" className="btn-secondary" style={{ whiteSpace: 'nowrap' }}>+ Create Club</button>
-                </form>
-              </div>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h2 style={{ fontSize: '1.5rem', margin: 0, color: '#0f172a' }}>Active Clubs Directory</h2>
-                  <input 
-                    type="text" 
-                    className="input-glass" 
-                    placeholder="Search clubs by name..." 
-                    value={searchClubQuery} 
-                    onChange={e => setSearchClubQuery(e.target.value)} 
-                    style={{ width: '300px' }}
-                  />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                  {clubs.filter(c => c.name.toLowerCase().includes(searchClubQuery.toLowerCase())).length === 0 ? (
-                    <p style={{ color: '#64748b' }}>No clubs found.</p>
-                  ) : (
-                    clubs.filter(c => c.name.toLowerCase().includes(searchClubQuery.toLowerCase())).map(club => (
-                      <div key={club.id} className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-                        {editingClubId === club.id ? (
-                          <form onSubmit={(e) => handleUpdateClub(e, club.id)} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
-                            <input 
-                              className="input-glass" 
-                              value={editClubForm.name} 
-                              onChange={e => setEditClubForm({...editClubForm, name: e.target.value})} 
-                              required 
-                            />
-                            <textarea 
-                              className="input-glass" 
-                              value={editClubForm.description} 
-                              onChange={e => setEditClubForm({...editClubForm, description: e.target.value})} 
-                              rows="3" 
-                            />
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-                              <button type="submit" className="btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', flex: 1 }}>Save</button>
-                              <button type="button" className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', flex: 1 }} onClick={() => setEditingClubId(null)}>Cancel</button>
-                            </div>
-                          </form>
-                        ) : (
-                          <>
-                            <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--primary)', fontSize: '1.25rem' }}>{club.name}</h3>
-                            <p style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '1.5rem', flex: 1 }}>{club.description || 'No description provided.'}</p>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span className="badge" style={{ background: '#e0e7ff', color: '#4f46e5' }}>Active</span>
-                              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem' }} onClick={() => {
-                                  setEditingClubId(club.id);
-                                  setEditClubForm({ name: club.name, description: club.description || '' });
-                                }}>Edit</button>
-                                <button className="btn-secondary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.8rem', background: '#fee2e2', color: '#dc2626', borderColor: '#fca5a5' }} onClick={() => handleDeleteClub(club.id)}>Delete</button>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
           
           {/* Admin Analytics View */}
           {activeSubMenu === 'admin_analytics' && (
