@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
-import { Users, Edit2, Check, X } from 'lucide-react';
+import { Users, Edit2, Check, X, Trash2 } from 'lucide-react';
 
 const ClubManagement = () => {
   const [clubs, setClubs] = useState([]);
@@ -15,6 +15,9 @@ const ClubManagement = () => {
   const [editingMember, setEditingMember] = useState(null);
   const [editRole, setEditRole] = useState('');
   const [editDept, setEditDept] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editGlobalDept, setEditGlobalDept] = useState('');
 
   const { user } = useContext(AuthContext);
   const baseURL = '';
@@ -140,10 +143,14 @@ const ClubManagement = () => {
     setEditingMember(member.id);
     setEditRole(member.role);
     setEditDept(member.club_department || '');
+    setEditName(member.user_name || '');
+    setEditEmail(member.user_email || '');
+    setEditGlobalDept(member.user_department || '');
   };
 
-  const saveEdit = async (userId) => {
+  const saveEdit = async (userId, globalRole) => {
     try {
+      // 1. Update club role
       await axios.put(`${baseURL}/api/clubs/${selectedClub}/members/${userId}/role`, {
         role: editRole,
         club_department: editDept
@@ -151,15 +158,38 @@ const ClubManagement = () => {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       
+      // 2. Update global user profile
+      await axios.put(`${baseURL}/api/admin/users/${userId}`, {
+        name: editName,
+        email: editEmail,
+        department: editGlobalDept,
+        role: globalRole || 'student', // Fallback
+        password: ''
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      
       // Update local state
       setMembers(members.map(m => 
         m.user_id === userId 
-          ? { ...m, role: editRole, club_department: editDept } 
+          ? { ...m, role: editRole, club_department: editDept, user_name: editName, user_email: editEmail, user_department: editGlobalDept } 
           : m
       ));
       setEditingMember(null);
     } catch (err) {
-      alert(`Error updating role: ${err.response?.data?.detail || err.message}`);
+      alert(`Error updating member: ${err.response?.data?.detail || err.message}`);
+    }
+  };
+
+  const handleRemoveMember = async (userId) => {
+    if (!window.confirm("Are you sure you want to remove this member from the club?")) return;
+    try {
+      await axios.delete(`${baseURL}/api/clubs/${selectedClub}/members/${userId}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setMembers(members.filter(m => m.user_id !== userId));
+    } catch (err) {
+      alert(`Error removing member: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -214,14 +244,22 @@ const ClubManagement = () => {
                     <option value="departmental">Departmental Club</option>
                   </select>
                   {newClubData.club_type === 'departmental' && (
-                    <select className="input-glass" required value={newClubData.department} onChange={e => setNewClubData({...newClubData, department: e.target.value})}>
-                      <option value="" disabled>Select Department</option>
-                      <option value="CSE">CSE</option>
-                      <option value="ECE">ECE</option>
-                      <option value="ME">ME</option>
-                      <option value="EE">EE</option>
-                      <option value="CE">CE</option>
-                    </select>
+                    <>
+                      <input 
+                        list="club-dept-options"
+                        type="text"
+                        className="input-glass"
+                        required
+                        value={newClubData.department}
+                        onChange={e => setNewClubData({...newClubData, department: e.target.value})}
+                        placeholder="Select existing or type a new one..."
+                      />
+                      <datalist id="club-dept-options">
+                        {[...new Set(["CSE", "ECE", "ME", "EE", "CE", "BBA", "BCA", ...clubs.map(c => c.department).filter(Boolean)])].sort().map(d => (
+                          <option key={d} value={d} />
+                        ))}
+                      </datalist>
+                    </>
                   )}
                   <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
                     <button type="submit" className="btn-primary" style={{ flex: 1 }}>Create</button>
@@ -318,8 +356,23 @@ const ClubManagement = () => {
                     <tbody>
                       {members.map(member => (
                         <tr key={member.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-                          <td style={{ padding: '1rem', fontWeight: 500 }}>{member.user_name}</td>
-                          <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{member.user_email}</td>
+                          {/* Name Column */}
+                          <td style={{ padding: '1rem', fontWeight: 500 }}>
+                            {editingMember === member.id ? (
+                              <input type="text" className="input-glass" style={{ padding: '0.25rem', width: '120px' }} value={editName} onChange={e => setEditName(e.target.value)} />
+                            ) : (
+                              member.user_name
+                            )}
+                          </td>
+
+                          {/* Email Column */}
+                          <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>
+                            {editingMember === member.id ? (
+                              <input type="email" className="input-glass" style={{ padding: '0.25rem', width: '150px' }} value={editEmail} onChange={e => setEditEmail(e.target.value)} />
+                            ) : (
+                              member.user_email
+                            )}
+                          </td>
                           
                           {/* Role Column */}
                           <td style={{ padding: '1rem' }}>
@@ -348,7 +401,11 @@ const ClubManagement = () => {
 
                           {/* Department Column */}
                           <td style={{ padding: '1rem' }}>
-                            {member.user_department || '-'}
+                            {editingMember === member.id ? (
+                              <input type="text" className="input-glass" style={{ padding: '0.25rem', width: '100px' }} value={editGlobalDept} onChange={e => setEditGlobalDept(e.target.value)} />
+                            ) : (
+                              member.user_department || '-'
+                            )}
                           </td>
                           
                           {/* Points Column */}
@@ -367,7 +424,7 @@ const ClubManagement = () => {
                           <td style={{ padding: '1rem', textAlign: 'right' }}>
                             {editingMember === member.id ? (
                               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                <button onClick={() => saveEdit(member.user_id)} style={{ background: 'none', border: 'none', color: 'green', cursor: 'pointer' }} title="Save">
+                                <button onClick={() => saveEdit(member.user_id, member.global_role)} style={{ background: 'none', border: 'none', color: 'green', cursor: 'pointer' }} title="Save">
                                   <Check size={20} />
                                 </button>
                                 <button onClick={() => setEditingMember(null)} style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer' }} title="Cancel">
@@ -375,13 +432,22 @@ const ClubManagement = () => {
                                 </button>
                               </div>
                             ) : (
-                              <button 
-                                onClick={() => startEditing(member)} 
-                                style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
-                                title="Edit Role"
-                              >
-                                <Edit2 size={18} />
-                              </button>
+                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                <button 
+                                  onClick={() => startEditing(member)} 
+                                  style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
+                                  title="Edit Role"
+                                >
+                                  <Edit2 size={18} />
+                                </button>
+                                <button 
+                                  onClick={() => handleRemoveMember(member.user_id)} 
+                                  style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer' }}
+                                  title="Remove Member"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>

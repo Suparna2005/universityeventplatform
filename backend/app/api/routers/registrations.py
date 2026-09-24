@@ -13,9 +13,19 @@ def register_for_event(event_id: int, current_user: User = Depends(get_current_u
         raise HTTPException(status_code=403, detail="Only students can register for events")
     
     if not current_user.student_profile:
-        raise HTTPException(status_code=400, detail="Student profile not found")
-        
-    student_id = current_user.student_profile.id
+        from app.models.user import Student
+        new_profile = Student(
+            user_id=current_user.id,
+            student_number=f"STU{current_user.id:04d}",
+            department=current_user.department or "General",
+            semester=1
+        )
+        db.add(new_profile)
+        db.commit()
+        db.refresh(new_profile)
+        student_id = new_profile.id
+    else:
+        student_id = current_user.student_profile.id
 
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -59,9 +69,21 @@ def register_for_event(event_id: int, current_user: User = Depends(get_current_u
 
 @router.get("/me/registrations")
 def get_my_registrations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.student or not current_user.student_profile:
+    if current_user.role != RoleEnum.student:
         return []
-    
+        
+    if not current_user.student_profile:
+        from app.models.user import Student
+        new_profile = Student(
+            user_id=current_user.id,
+            student_number=f"STU{current_user.id:04d}",
+            department=current_user.department or "General",
+            semester=1
+        )
+        db.add(new_profile)
+        db.commit()
+        db.refresh(new_profile)
+        
     registrations = db.query(Registration).filter(
         Registration.student_id == current_user.student_profile.id
     ).all()
@@ -77,20 +99,43 @@ def get_my_registrations(current_user: User = Depends(get_current_user), db: Ses
 
 @router.get("/me/recommendations")
 def get_my_recommendations(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.student or not current_user.student_profile:
+    if current_user.role != RoleEnum.student:
         return []
+        
+    if not current_user.student_profile:
+        from app.models.user import Student
+        new_profile = Student(
+            user_id=current_user.id,
+            student_number=f"STU{current_user.id:04d}",
+            department=current_user.department or "General",
+            semester=1
+        )
+        db.add(new_profile)
+        db.commit()
+        db.refresh(new_profile)
         
     from app.services.recommendation_service import get_recommended_events
     recs = get_recommended_events(db, current_user.student_profile)
     
-    return [
-        {
-            "id": r["event"].id,
-            "title": r["event"].title,
-            "description": r["event"].description,
-            "date": r["event"].date,
-            "location": r["event"].location,
-            "club_name": r["event"].club.name if r["event"].club else "University",
-            "score": r["score"]
-        } for r in recs
-    ]
+    results = []
+    student_department = (current_user.student_profile.department or "").strip().casefold()
+    for recommendation in recs:
+        event = recommendation["event"]
+        host_type = event.club.club_type if event.club else "university"
+        host_department = (event.club.department if event.club and event.club.club_type == "departmental" else event.department) or ""
+        if host_type == "departmental":
+            category = "my_department" if host_department.strip().casefold() == student_department and student_department else "other_departments"
+        else:
+            category = "university_clubs"
+        results.append({
+            "id": event.id,
+            "title": event.title,
+            "description": event.description,
+            "date": event.date,
+            "location": event.location,
+            "club_name": event.club.name if event.club else "University",
+            "host_department": host_department or None,
+            "event_category": category,
+            "score": recommendation["score"],
+        })
+    return results

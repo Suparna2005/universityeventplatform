@@ -9,7 +9,7 @@ from app.api.dependencies import get_current_user
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 @router.get("")
-def list_events(db: Session = Depends(get_db)):
+def list_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     # Return events that students should be able to see (published and finished events)
     events = db.query(Event).filter(Event.state.in_([
         EventState.published, 
@@ -17,23 +17,38 @@ def list_events(db: Session = Depends(get_db)):
         EventState.completed
     ])).order_by(Event.title.asc()).all()
     
-    # We serialize manually for now before adding Pydantic schemas
-    return [{
-        "id": e.id,
-        "title": e.title,
-        "description": e.description,
-        "date": e.date,
-        "end_date": e.end_date,
-        "location": e.location,
-        "capacity": e.capacity,
-        # Budget is explicitly hidden from the public/student event list
-        "registered_count": db.query(Registration).filter(
-            Registration.event_id == e.id,
-            Registration.status != RegistrationStatus.cancelled
-        ).count(),
-        "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
-        "club_name": e.club.name if e.club else "University",
-    } for e in events]
+    student_department = (current_user.student_profile.department if current_user.student_profile else current_user.department) or ""
+    student_department = student_department.strip().casefold()
+
+    result = []
+    for e in events:
+        host_type = e.club.club_type if e.club else "university"
+        host_department = (e.club.department if e.club and e.club.club_type == "departmental" else e.department) or ""
+        if host_type == "departmental":
+            category = "my_department" if host_department.strip().casefold() == student_department and student_department else "other_departments"
+        else:
+            category = "university_clubs"
+
+        result.append({
+            "id": e.id,
+            "title": e.title,
+            "description": e.description,
+            "date": e.date,
+            "end_date": e.end_date,
+            "location": e.location,
+            "capacity": e.capacity,
+            # Budget is explicitly hidden from the public/student event list
+            "registered_count": db.query(Registration).filter(
+                Registration.event_id == e.id,
+                Registration.status != RegistrationStatus.cancelled
+            ).count(),
+            "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
+            "club_name": e.club.name if e.club else "University",
+            "host_type": host_type,
+            "host_department": host_department or None,
+            "event_category": category,
+        })
+    return result
 
 @router.post("")
 def create_event(
@@ -66,7 +81,9 @@ def create_event(
             gifts_req=event.gifts_req,
             prizes_req=event.prizes_req,
             club_id=event.club_id,
-            state=EventState.pending_admin_initial  # Send straight to admin
+            department=current_user.department,
+            coordinator_id=current_user.id,
+            state=EventState.pending_finance  # Finance reviews budgets before coordinator publication
         )
         db.add(new_event)
         db.commit()
@@ -109,6 +126,8 @@ def update_event(
         event.gifts_req = event_data.gifts_req
         event.prizes_req = event_data.prizes_req
         event.club_id = event_data.club_id
+        if event.state == EventState.draft:
+            event.state = EventState.pending_finance
         
         db.commit()
         return {"message": "Event updated successfully"}

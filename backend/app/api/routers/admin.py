@@ -5,6 +5,9 @@ from app.models.event import Event, EventState
 from app.models.finance import Feedback, Budget, Expense
 from app.models.user import User, RoleEnum
 from app.api.dependencies import get_current_user
+from app.models.user import ClubMembership, ClubMemberRole
+from app.models.event import Registration, RegistrationStatus
+from app.models.engagement import Attendance
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -17,11 +20,14 @@ class AdminUserCreate(BaseModel):
     name: str
     email: str
     password: str
-    role: RoleEnum
+    role: str
     department: str = ""
 
+from fastapi import BackgroundTasks
+from app.core.email import send_student_credentials_email
+
 @router.post("/users")
-def create_user(request: AdminUserCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_user(request: AdminUserCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.admin:
         raise HTTPException(status_code=403, detail="Only Admins can create credentials")
     
@@ -38,13 +44,17 @@ def create_user(request: AdminUserCreate, current_user: User = Depends(get_curre
     )
     db.add(new_user)
     db.commit()
-    return {"message": "User created successfully"}
+    
+    # Send credentials email
+    background_tasks.add_task(send_student_credentials_email, request.email, request.name, request.password)
+    
+    return {"message": "User created successfully and email queued"}
 
 class AdminUserUpdate(BaseModel):
     name: str
     email: str
     password: str = ""
-    role: RoleEnum
+    role: str
     department: str = ""
 
 @router.put("/users/{user_id}")
@@ -147,26 +157,75 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
         
         result = []
         for e in events:
+            event_state = e.state.value if hasattr(e.state, 'value') else str(e.state)
+            # Route events created under the previous admin approval flow into the new workflow.
+            if event_state == EventState.pending_admin_initial.value:
+                event_state = EventState.pending_finance.value
+            elif event_state == EventState.pending_admin_final.value:
+                event_state = EventState.pending_coordinator_publish.value
             feedbacks = db.query(Feedback).filter(Feedback.event_id == e.id).all()
             positive_count = sum(1 for f in feedbacks if f.sentiment_score == "Positive")
+            registrations = db.query(Registration).filter(
+                Registration.event_id == e.id,
+                Registration.status == RegistrationStatus.registered
+            ).count()
+            attended_count = db.query(Attendance).join(
+                Registration, Attendance.registration_id == Registration.id
+            ).filter(
+                Registration.event_id == e.id,
+                Registration.status == RegistrationStatus.registered
+            ).count()
+            organizers = []
+            if e.club_id:
+                memberships = db.query(ClubMembership).filter(
+                    ClubMembership.club_id == e.club_id,
+                    ClubMembership.role.in_([
+                        ClubMemberRole.club_coordinator,
+                        ClubMemberRole.president,
+                        ClubMemberRole.head,
+                        ClubMemberRole.core,
+                    ])
+                ).all()
+                organizers = [
+                    {
+                        "name": membership.user.name,
+                        "role": membership.role.value,
+                    }
+                    for membership in memberships
+                    if membership.user
+                ]
+                club_events_completed = db.query(Event).filter(
+                    Event.club_id == e.club_id,
+                    Event.state == EventState.completed,
+                ).count()
+            else:
+                club_events_completed = 0
             
             result.append({
                 "id": e.id,
                 "title": e.title,
-                "state": e.state.value if hasattr(e.state, 'value') else str(e.state),
+                "description": e.description,
+                "state": event_state,
                 "date": e.date,
                 "end_date": e.end_date,
+                "location": e.location,
                 "feedback_count": len(feedbacks),
                 "positive_feedback_count": positive_count,
                 "capacity": e.capacity,
                 "budget": e.budget,
                 "club_name": e.club.name if e.club else "University",
+                "department": getattr(e, "department", None) or (e.club.department if (e.club and e.club.department) else "N/A"),
+                "dept_coordinator_name": db.query(User.name).filter(User.id == getattr(e, "coordinator_id", 0)).scalar() or (db.query(User.name).filter(User.role == 'coordinator', User.department == e.club.department).scalar() if (e.club and e.club.department) else None),
+                "club_completed_events_count": club_events_completed,
+                "organizers": organizers,
                 "accessories_req": e.accessories_req,
                 "guests_req": e.guests_req,
                 "gifts_req": e.gifts_req,
                 "prizes_req": e.prizes_req,
-                "registered_count": len(e.registrations),
+                "registered_count": registrations,
+                "attended_count": attended_count,
                 "attendance_file_url": e.attendance_file_url,
+                "expenses_file_url": getattr(e, "expenses_file_url", None),
                 "certificate_template_url": e.certificate_template_url,
                 "rejection_reason": getattr(e, "rejection_reason", None),
                 "actual_expenses": getattr(e, "actual_expenses", None)
@@ -260,8 +319,8 @@ def upload_attendance_file(event_id: int, file: UploadFile = File(...), current_
 
 @router.post("/events/{event_id}/upload-certificate-template")
 def upload_certificate_template(event_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
-        raise HTTPException(status_code=403, detail="Only admins can upload certificate templates")
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
+        raise HTTPException(status_code=403, detail="Only admins or coordinators can upload certificate templates")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -294,8 +353,8 @@ class AIPromptRequest(BaseModel):
 
 @router.post("/events/{event_id}/generate-ai-template")
 def generate_ai_template(event_id: int, request: AIPromptRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
-        raise HTTPException(status_code=403, detail="Only admins can generate AI templates")
+    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
+        raise HTTPException(status_code=403, detail="Only admins or coordinators can generate AI templates")
         
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
@@ -333,45 +392,23 @@ def generate_ai_template(event_id: int, request: AIPromptRequest, current_user: 
 
 
 
-@router.put("/events/{event_id}/approve-admin-initial")
-def approve_admin_initial(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if event.state != EventState.pending_admin_initial:
-        raise HTTPException(status_code=400, detail="Event is not pending initial admin approval")
-    event.state = EventState.pending_finance
-    db.commit()
-    return {"message": "Sent to Finance"}
-
 @router.put("/events/{event_id}/approve-budget")
 def approve_event_budget(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    if current_user.role != RoleEnum.finance:
+        raise HTTPException(status_code=403, detail="Only Finance can approve event budgets")
     event = db.query(Event).filter(Event.id == event_id).first()
-    if event.state != EventState.pending_finance:
+    if event.state not in [EventState.pending_finance, EventState.pending_admin_initial]:
         raise HTTPException(status_code=400, detail="Event is not pending budget review")
-    event.state = EventState.pending_admin_final
-    db.commit()
-    return {"message": "Budget approved, sent back to Admin"}
-
-@router.put("/events/{event_id}/approve-admin-final")
-def approve_admin_final(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
-        raise HTTPException(status_code=403, detail="Unauthorized")
-    event = db.query(Event).filter(Event.id == event_id).first()
-    if event.state != EventState.pending_admin_final:
-        raise HTTPException(status_code=400, detail="Event is not pending final admin approval")
     event.state = EventState.pending_coordinator_publish
     db.commit()
-    return {"message": "Final admin approval given, sent to Coordinator"}
+    return {"message": "Budget approved and sent to Coordinator for publication"}
 
 @router.put("/events/{event_id}/publish")
 def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.coordinator:
         raise HTTPException(status_code=403, detail="Only Coordinator can publish")
     event = db.query(Event).filter(Event.id == event_id).first()
-    if event.state != EventState.pending_coordinator_publish:
+    if event.state not in [EventState.pending_coordinator_publish, EventState.pending_admin_final]:
         raise HTTPException(status_code=400, detail="Event is not pending coordinator publish")
     event.state = EventState.published
     db.commit()
@@ -379,8 +416,9 @@ def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_
 
 from pydantic import BaseModel
 
+from typing import Optional
 class ExpenseReport(BaseModel):
-    actual_expenses: int
+    actual_expenses: Optional[int] = 0
 
 @router.put("/events/{event_id}/close")
 def close_event(event_id: int, report: ExpenseReport, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -394,7 +432,7 @@ def close_event(event_id: int, report: ExpenseReport, current_user: User = Depen
     if event.state not in [EventState.published, EventState.pending_completion]:
         raise HTTPException(status_code=400, detail="Only published/running events can be closed")
         
-    event.actual_expenses = report.actual_expenses
+    event.actual_expenses = report.actual_expenses or 0
     event.state = EventState.finance_review
     db.commit()
     return {"message": "Event closed and expense report submitted to Finance."}
@@ -408,9 +446,32 @@ def verify_expenses(event_id: int, current_user: User = Depends(get_current_user
     if event.state != EventState.finance_review:
         raise HTTPException(status_code=400, detail="Event is not pending finance expense review")
         
-    event.state = EventState.pending_completion
+    event.state = EventState.completed
     db.commit()
-    return {"message": "Expenses verified, sent to Admin for final completion."}
+    return {"message": "Expenses verified, event officially marked as completed!"}
+@router.post("/events/{event_id}/upload-expenses")
+async def upload_expenses_csv(event_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role not in [RoleEnum.coordinator, RoleEnum.admin]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    event = db.query(Event).filter(Event.id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+        
+    import os
+    import shutil
+    import uuid
+    os.makedirs("uploads/expenses", exist_ok=True)
+    ext = file.filename.split(".")[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    filepath = f"uploads/expenses/{filename}"
+    
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    event.expenses_file_url = f"/api/uploads/expenses/{filename}"
+    db.commit()
+    
+    return {"message": "Expense CSV uploaded successfully!", "url": event.expenses_file_url}
 
 @router.put("/events/{event_id}/approve-completion")
 def approve_completion(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -440,7 +501,7 @@ class RejectionReason(BaseModel):
 
 @router.put("/events/{event_id}/request-changes")
 def request_changes(event_id: int, payload: RejectionReason, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
+    if current_user.role != RoleEnum.finance:
         raise HTTPException(status_code=403, detail="Unauthorized")
         
     event = db.query(Event).filter(Event.id == event_id).first()
@@ -448,13 +509,13 @@ def request_changes(event_id: int, payload: RejectionReason, current_user: User 
         raise HTTPException(status_code=404, detail="Event not found")
         
     event.rejection_reason = payload.reason
-    event.state = EventState.pending_admin_initial  # Reset back to coordinator draft
+    event.state = EventState.draft  # Return to coordinator for changes and resubmission
     db.commit()
     return {"message": "Changes requested. Event sent back to Coordinator."}
 
 @router.put("/events/{event_id}/reject")
 def reject_event(event_id: int, payload: RejectionReason, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.finance]:
+    if current_user.role != RoleEnum.finance:
         raise HTTPException(status_code=403, detail="Unauthorized")
         
     event = db.query(Event).filter(Event.id == event_id).first()

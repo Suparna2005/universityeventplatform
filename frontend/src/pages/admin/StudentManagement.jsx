@@ -15,6 +15,8 @@ const StudentManagement = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const baseURL = '';
 
+  const [csvFile, setCsvFile] = useState(null);
+
   useEffect(() => {
     fetchStudents();
   }, []);
@@ -27,6 +29,31 @@ const StudentManagement = () => {
       setStudentsList(res.data);
     } catch (err) {
       console.error('Failed to fetch students', err);
+    }
+  };
+
+  const handleBulkUpload = async (e) => {
+    e.preventDefault();
+    if (!csvFile) return;
+    
+    setMessage('');
+    setError('');
+    const form = new FormData();
+    form.append('file', csvFile);
+
+    try {
+      const res = await axios.post(`${baseURL}/api/coordinator/students/csv`, form, {
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      setMessage(res.data.message || 'Students imported successfully.');
+      setCsvFile(null);
+      e.target.reset();
+      fetchStudents();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Error uploading CSV');
     }
   };
 
@@ -93,37 +120,48 @@ const StudentManagement = () => {
         </div>
         
         <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
-          {editingUserId ? "Modify the student's details." : "Select a student from the directory to edit their details. User generation is strictly handled by Admins."}
+          {editingUserId ? "Modify the student's details." : "Generate credentials for students in your department individually or via CSV."}
         </p>
 
         {message && <div style={{ padding: '1rem', background: '#dcfce7', color: '#166534', borderRadius: '6px', marginBottom: '1rem' }}>{message}</div>}
         {error && <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '6px', marginBottom: '1rem' }}>{error}</div>}
 
-        {editingUserId && (
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Full Name</label>
-              <input type="text" className="input-glass" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-            </div>
-            
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>University Email</label>
-              <input type="email" className="input-glass" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-            </div>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem', marginBottom: editingUserId ? '0' : '2rem' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Full Name</label>
+            <input type="text" className="input-glass" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          </div>
+          
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>University Email</label>
+            <input type="email" className="input-glass" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+          </div>
 
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>New Password (Optional)</label>
-              <input type="text" className="input-glass" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder="Leave blank to keep current" />
-            </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>{editingUserId ? "New Password (Optional)" : "Temporary Password"}</label>
+            <input type="text" className="input-glass" required={!editingUserId} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder={editingUserId ? "Leave blank to keep current" : ""} />
+          </div>
 
-            <button type="submit" className="btn-primary" style={{ marginTop: '1rem', padding: '0.8rem' }}>
-              Save Changes
-            </button>
-            
+          <button type="submit" className="btn-primary" style={{ marginTop: '1rem', padding: '0.8rem' }}>
+            {editingUserId ? "Save Changes" : "Generate Student"}
+          </button>
+          
+          {editingUserId && (
             <button type="button" onClick={() => {setEditingUserId(null); setFormData({name:'',email:'',password:''});}} className="btn-secondary" style={{ marginTop: '0.5rem', padding: '0.8rem' }}>
               Cancel Edit
             </button>
-          </form>
+          )}
+        </form>
+
+        {!editingUserId && (
+          <div style={{ borderTop: '2px dashed var(--glass-border)', paddingTop: '2rem' }}>
+            <h3 style={{ margin: '0 0 1rem 0' }}>Bulk Upload via CSV</h3>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Upload a CSV with columns: <strong>name, email, password, year, section</strong></p>
+            <form onSubmit={handleBulkUpload} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <input type="file" accept=".csv" required onChange={e => setCsvFile(e.target.files[0])} className="input-glass" />
+              <button type="submit" className="btn-primary">Upload & Generate</button>
+            </form>
+          </div>
         )}
       </div>
 
@@ -169,6 +207,12 @@ const StudentManagement = () => {
                       style={{ padding: '0.4rem 0.8rem', background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
                     >
                       Edit Profile
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteClick(u.id)} 
+                      style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                    >
+                      Delete
                     </button>
                   </td>
                 </tr>

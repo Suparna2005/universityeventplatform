@@ -19,10 +19,12 @@ is_vercel = bool(os.getenv("VERCEL"))
 UPLOAD_DIR = "/tmp/uploads/profiles" if is_vercel else "uploads/profiles"
 ATTENDANCE_DIR = "/tmp/uploads/attendance" if is_vercel else "uploads/attendance"
 GALLERY_DIR = "/tmp/uploads/gallery" if is_vercel else "uploads/gallery"
+EXPENSES_DIR = "/tmp/uploads/expenses" if is_vercel else "uploads/expenses"
 try:
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(ATTENDANCE_DIR, exist_ok=True)
     os.makedirs(GALLERY_DIR, exist_ok=True)
+    os.makedirs(EXPENSES_DIR, exist_ok=True)
 except Exception:
     pass
 
@@ -130,8 +132,9 @@ async def lifespan(app: FastAPI):
                     "ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0",
                     "ALTER TABLE clubs ADD COLUMN club_type VARCHAR(50) DEFAULT 'university'",
                     "ALTER TABLE clubs ADD COLUMN department TEXT",
-                    "ALTER TYPE roleenum ADD VALUE IF NOT EXISTS 'club_coordinator'",
-                    "ALTER TYPE clubmemberrole ADD VALUE IF NOT EXISTS 'club_coordinator'"
+                    "ALTER TYPE joinrequeststatus ADD VALUE IF NOT EXISTS 'pending_admin'",
+                    "ALTER TYPE leaverequeststatus ADD VALUE IF NOT EXISTS 'pending_admin'",
+                    "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(255) USING role::text;"
                 ]
                 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                     for q in queries:
@@ -167,7 +170,7 @@ app.mount("/static/attendance", StaticFiles(directory=ATTENDANCE_DIR), name="sta
 CERTIFICATE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "certificates")
 os.makedirs(CERTIFICATE_DIR, exist_ok=True)
 app.mount("/static/certificates", StaticFiles(directory=CERTIFICATE_DIR), name="static_certificates")
-
+app.mount("/api/uploads/expenses", StaticFiles(directory=EXPENSES_DIR), name="expenses")
 @app.on_event("startup")
 def dump_db_state():
     try:
@@ -250,9 +253,63 @@ def force_patch():
     try:
         from sqlalchemy import text
         from app.database import engine
+        queries = [
+            "ALTER TABLE users ADD COLUMN created_by_role TEXT",
+            "ALTER TABLE clubs ADD COLUMN club_type VARCHAR(50) DEFAULT 'university'",
+            "ALTER TABLE clubs ADD COLUMN department TEXT",
+            "ALTER TYPE joinrequeststatus ADD VALUE IF NOT EXISTS 'pending_admin'",
+            "ALTER TYPE leaverequeststatus ADD VALUE IF NOT EXISTS 'pending_admin'",
+            "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(255) USING role::text;",
+            "ALTER TABLE events ADD COLUMN department VARCHAR(255)",
+            "ALTER TABLE events ADD COLUMN coordinator_id INTEGER REFERENCES users(id)",
+            "ALTER TABLE events ADD COLUMN expenses_file_url TEXT",
+            "UPDATE events SET department = (SELECT department FROM clubs WHERE clubs.id = events.club_id) WHERE department IS NULL",
+            "UPDATE events SET coordinator_id = (SELECT id FROM users WHERE users.role = 'coordinator' AND users.department = events.department LIMIT 1) WHERE coordinator_id IS NULL AND department IS NOT NULL AND department != 'University'"
+        ]
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.execute(text("ALTER TABLE users ADD COLUMN created_by_role TEXT"))
-        return {"success": True, "message": "Column added"}
+            for q in queries:
+                try:
+                    conn.execute(text(q))
+                except Exception:
+                    pass
+        return {"success": True, "message": "Patches applied"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/standardize-depts")
+def standardize_depts():
+    try:
+        from sqlalchemy import text
+        from app.database import engine
+        
+        # Mappings
+        updates = [
+            # CSE
+            "UPDATE users SET department = 'CSE' WHERE department ILIKE '%computer%' OR department ILIKE '%cse%'",
+            "UPDATE clubs SET department = 'CSE' WHERE department ILIKE '%computer%' OR department ILIKE '%cse%'",
+            
+            # ME
+            "UPDATE users SET department = 'ME' WHERE department ILIKE '%mech%' OR department ILIKE '%mee%'",
+            "UPDATE clubs SET department = 'ME' WHERE department ILIKE '%mech%' OR department ILIKE '%mee%'",
+            
+            # ECE
+            "UPDATE users SET department = 'ECE' WHERE department ILIKE '%electro%' OR department ILIKE '%ece%'",
+            "UPDATE clubs SET department = 'ECE' WHERE department ILIKE '%electro%' OR department ILIKE '%ece%'",
+            
+            # EE
+            "UPDATE users SET department = 'EE' WHERE department ILIKE '%electrical%' OR department = 'EE'",
+            "UPDATE clubs SET department = 'EE' WHERE department ILIKE '%electrical%' OR department = 'EE'",
+            
+            # BBA / Arts -> BBA
+            "UPDATE users SET department = 'BBA' WHERE department ILIKE '%bba%' OR department ILIKE '%arts%' OR department ILIKE '%business%' OR department ILIKE '%bca%'",
+            "UPDATE clubs SET department = 'BBA' WHERE department ILIKE '%bba%' OR department ILIKE '%arts%' OR department ILIKE '%business%' OR department ILIKE '%bca%'",
+        ]
+        
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+            for q in updates:
+                conn.execute(text(q))
+                
+        return {"success": True, "message": "All departments standardized successfully to CSE, ECE, ME, EE, BBA!"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -484,7 +541,7 @@ def test_create_event():
                 location="Main Hall",
                 capacity=100,
                 budget=5000,
-                state=EventState.pending_admin_initial
+                state=EventState.pending_finance
             )
             db.add(new_event)
             db.commit()

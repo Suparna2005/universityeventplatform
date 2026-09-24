@@ -41,9 +41,13 @@ class Event(Base):
     gifts_req = Column(Text, nullable=True)
     prizes_req = Column(Text, nullable=True)
 
-    state = Column(Enum(EventState, native_enum=False), default=EventState.pending_admin_initial, nullable=False)
+    state = Column(Enum(EventState, native_enum=False), default=EventState.pending_finance, nullable=False)
     attendance_file_url = Column(String, nullable=True)
+    expenses_file_url = Column(String, nullable=True)
     certificate_template_url = Column(String, nullable=True)
+    
+    department = Column(String, nullable=True)
+    coordinator_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     club_id = Column(Integer, ForeignKey("clubs.id"))
     club = relationship("Club", back_populates="events")

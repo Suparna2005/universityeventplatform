@@ -3,9 +3,8 @@ Traceback (most recent call last):
     self.dialect.do_execute(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
     cursor.execute(statement, parameters)
-psycopg2.errors.InvalidTextRepresentation: invalid input value for enum joinrequeststatus: "pending_admin"
-LINE 3: WHERE club_join_requests.status = 'pending_admin'
-                                          ^
+psycopg2.errors.UniqueViolation: duplicate key value violates unique constraint "students_user_id_key"
+DETAIL:  Key (user_id)=(91) already exists.
 
 
 The above exception was the direct cause of the following exception:
@@ -47,18 +46,36 @@ Traceback (most recent call last):
     return await future
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
     result = context.run(func, *args)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\admin.py", line 125, in get_pending_club_requests
-    requests = db.query(ClubJoinRequest).filter(ClubJoinRequest.status == "pending_admin").all()
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\query.py", line 2673, in all
-    return self._iter().all()  # type: ignore
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\query.py", line 2827, in _iter
-    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2351, in execute
-    return self._execute_internal(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2236, in _execute_internal
-    result: Result[Any] = compile_state_cls.orm_execute_statement(
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\context.py", line 293, in orm_execute_statement
-    result = conn.execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\registrations.py", line 84, in get_my_registrations
+    db.commit()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2017, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1302, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1277, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4341, in flush
+    self._flush(objects)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4477, in _flush
+    transaction.rollback(_capture_exception=True)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4437, in _flush
+    flush_context.execute()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in execute
+    util.preloaded.orm_persistence.save_obj(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in save_obj
+    _emit_insert_statements(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\persistence.py", line 1233, in _emit_insert_statements
+    result = connection.execute(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1418, in execute
     return meth(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\elements.py", line 515, in _execute_on_connection
@@ -75,12 +92,9 @@ Traceback (most recent call last):
     self.dialect.do_execute(
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
     cursor.execute(statement, parameters)
-sqlalchemy.exc.DataError: (psycopg2.errors.InvalidTextRepresentation) invalid input value for enum joinrequeststatus: "pending_admin"
-LINE 3: WHERE club_join_requests.status = 'pending_admin'
-                                          ^
+sqlalchemy.exc.IntegrityError: (psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint "students_user_id_key"
+DETAIL:  Key (user_id)=(91) already exists.
 
-[SQL: SELECT club_join_requests.id AS club_join_requests_id, club_join_requests.user_id AS club_join_requests_user_id, club_join_requests.club_id AS club_join_requests_club_id, club_join_requests.status AS club_join_requests_status, club_join_requests.message AS club_join_requests_message, club_join_requests.created_at AS club_join_requests_created_at 
-FROM club_join_requests 
-WHERE club_join_requests.status = %(status_1)s]
-[parameters: {'status_1': 'pending_admin'}]
-(Background on this error at: https://sqlalche.me/e/20/9h9h)
+[SQL: INSERT INTO students (user_id, student_number, department, semester) VALUES (%(user_id)s, %(student_number)s, %(department)s, %(semester)s) RETURNING students.id]
+[parameters: {'user_id': 91, 'student_number': 'STU0091', 'department': 'CSE', 'semester': 1}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)

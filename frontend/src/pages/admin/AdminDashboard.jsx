@@ -12,6 +12,17 @@ import UserManagement from './UserManagement';
 import AdminClubApprovals from './AdminClubApprovals';
 import StudentManagement from './StudentManagement';
 
+const getEventTimelineStatus = (event) => {
+  if (event.state === 'completed') return 'Completed';
+  const now = new Date();
+  const start = new Date(event.date);
+  const end = event.end_date ? new Date(event.end_date) : new Date(start);
+  if (!event.end_date) end.setHours(23, 59, 59, 999);
+  if (now >= start && now <= end) return 'Ongoing';
+  if (now < start) return 'Upcoming';
+  return 'Past event';
+};
+
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('events'); // legacy tab
   const [activeMenu, setActiveMenu] = useState('Events');
@@ -164,7 +175,7 @@ const AdminDashboard = () => {
         id: editEventId || Date.now(),
         title: newEvent.title,
         date: newEvent.date,
-        state: editEventId ? 'pending_admin_initial' : 'pending_admin_initial'
+        state: 'pending_finance'
       };
       
       if (editEventId) {
@@ -177,7 +188,7 @@ const AdminDashboard = () => {
       
       // Auto-redirect to the appropriate events directory so they can see their new event
       if (user.role === 'admin') {
-        setActiveSubMenu('admin_events_pending');
+        setActiveSubMenu('admin_dash_events');
       } else {
         setActiveSubMenu('events_submitted');
       }
@@ -293,8 +304,8 @@ const AdminDashboard = () => {
 
   const handleVerifyExpenses = async (eventId) => {
     try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/verify-expenses`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert("Expenses verified! Sent to Admin for final completion.");
+      const response = await axios.put(`${baseURL}/api/admin/events/${eventId}/verify-expenses`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      alert(response.data.message || "Expenses verified! Event is now completed.");
       fetchAdminData();
     } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
   };
@@ -333,13 +344,12 @@ const AdminDashboard = () => {
   };
 
   const handleCloseEvent = async (eventId) => {
-    const expenses = window.prompt("Enter the actual total expenses (in ₹) for this event:");
-    if (expenses === null || isNaN(parseInt(expenses))) {
-      alert("Invalid expense amount. Please enter a valid number.");
-      return;
-    }
+    const expenses = window.prompt("Enter the actual total expenses (in ₹). (Leave blank if you uploaded a CSV)");
+    const parsedExpenses = parseInt(expenses);
+    const finalExpenses = isNaN(parsedExpenses) ? 0 : parsedExpenses;
+
     try {
-      await axios.put(`${baseURL}/api/admin/events/${eventId}/close`, { actual_expenses: parseInt(expenses) }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      await axios.put(`${baseURL}/api/admin/events/${eventId}/close`, { actual_expenses: finalExpenses }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
       alert("Event closed successfully! Expense report sent to Finance.");
       fetchAdminData();
     } catch (err) {
@@ -357,9 +367,10 @@ const AdminDashboard = () => {
     }
   };
 
+
   const handlePublishCertificates = async (eventId) => {
     try {
-      const response = await axios.put(`${baseURL}/api/certificates/events/${eventId}/publish`);
+      const response = await axios.put(`${baseURL}/api/certificates/events/${eventId}/publish`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
       alert(response.data.message);
     } catch (err) {
       alert(`Error: ${err.response?.data?.detail || 'Failed to publish certificates'}`);
@@ -389,10 +400,23 @@ const AdminDashboard = () => {
     formData.append("file", file);
     try {
       await axios.post(`${baseURL}/api/admin/events/${eventId}/upload-attendance`, formData);
-      alert("Attendance file uploaded to Admin successfully!");
+      alert("Final Results CSV uploaded successfully!");
       fetchAdminData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to upload attendance'}`);
+      alert(`Error: ${err.response?.data?.detail || 'Failed to upload results'}`);
+    }
+  };
+
+  const handleUploadExpenses = async (eventId, file) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      await axios.post(`${baseURL}/api/admin/events/${eventId}/upload-expenses`, formData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      alert("Expense Report CSV uploaded successfully!");
+      fetchAdminData();
+    } catch (err) {
+      alert(`Error uploading CSV: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -420,13 +444,6 @@ const AdminDashboard = () => {
   const getMenuStructure = () => {
     if (user.role === 'admin') {
       return [
-        {
-          category: 'Approvals',
-          items: [
-            { id: 'admin_events_pending', label: 'Pending Initial Review' },
-            { id: 'admin_appr_final', label: 'Pending Final Approval' },
-          ]
-        },
         {
           category: 'Events',
           items: [
@@ -542,14 +559,14 @@ const AdminDashboard = () => {
       case 'events_draft':
         return filtered.filter(e => e.state === 'draft');
       case 'events_submitted':
-        return filtered.filter(e => e.state === 'pending_admin_initial');
+        return filtered.filter(e => ['pending_finance', 'draft'].includes(e.state));
       case 'pending_admin':
-        return filtered.filter(e => e.state === 'pending_admin_initial' || e.state === 'pending_admin_final');
+        return filtered.filter(e => e.state === 'pending_finance');
       case 'pending_finance':
       case 'admin_appr_finance':
         return filtered.filter(e => e.state === 'pending_finance' || e.state === 'finance_review');
       case 'events_approved':
-        return filtered.filter(e => e.state === 'pending_coordinator_publish');
+        return filtered.filter(e => ['pending_coordinator_publish', 'pending_admin_final'].includes(e.state));
       case 'events_published':
       case 'admin_events_published':
       case 'attendance_scanner':
@@ -565,9 +582,9 @@ const AdminDashboard = () => {
         return filtered.filter(e => new Date(e.date) > new Date());
       case 'admin_dash_approvals':
       case 'admin_events_pending':
-        return filtered.filter(e => e.state === 'pending_admin_initial');
+        return filtered.filter(e => e.state === 'pending_finance');
       case 'admin_appr_final':
-        return filtered.filter(e => e.state === 'pending_admin_final' || e.state === 'pending_completion');
+        return filtered.filter(e => e.state === 'pending_completion');
       case 'admin_events_approved':
         return filtered.filter(e => e.state === 'pending_coordinator_publish' || e.state === 'published' || e.state === 'completed');
       case 'admin_events_rejected':
@@ -787,7 +804,7 @@ const AdminDashboard = () => {
 
               <div style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
                 <button type="submit" className="btn-primary" style={{ width: '100%', padding: '1rem', fontSize: '1.1rem' }}>
-                  {editEventId ? '💾 Save Changes' : '📤 Submit Program Request to Admin'}
+                  {editEventId ? '💾 Save Changes' : '📤 Submit Program Request to Finance'}
                 </button>
               </div>
             </form>
@@ -829,20 +846,57 @@ const AdminDashboard = () => {
                 )}
                 
                 <span style={{ alignSelf: 'flex-start', marginBottom: '1rem' }} className={`badge ${['completed', 'published'].includes(event.state) ? 'badge-success' : 'badge-warning'}`}>
-                  {event.state === 'pending_admin_initial' ? 'Sent to Admin' :
-                   event.state === 'pending_finance' ? 'Budget Sent to Finance' :
-                   event.state === 'pending_admin_final' ? 'Finance Approved (At Admin)' :
+                  {event.state === 'pending_admin_initial' || event.state === 'pending_finance' ? 'Pending Finance Approval' :
+                   event.state === 'pending_admin_final' ? 'Finance Approved (Coordinator to Publish)' :
                    event.state === 'pending_coordinator_publish' ? 'Approved (Ready to Publish)' :
                    event.state === 'published' ? 'Approved & Published' :
                    event.state === 'pending_completion' ? 'Pending Completion' :
                    event.state === 'completed' ? 'Completed' : 
                    event.state}
                 </span>
+
+                {user.role === 'admin' && activeSubMenu === 'admin_dash_events' && (
+                  <section style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                      <strong style={{ color: '#0f172a' }}>{getEventTimelineStatus(event)}</strong>
+                      <span style={{ color: '#475569', fontSize: '0.875rem' }}>{event.club_name || 'University'} · {event.club_completed_events_count || 0} completed event(s) hosted</span>
+                    </div>
+                    <p style={{ margin: '0 0 0.5rem', color: '#334155' }}><strong>When:</strong> {new Date(event.date).toLocaleString()}{event.end_date ? ` – ${new Date(event.end_date).toLocaleString()}` : ''}</p>
+                    <p style={{ margin: '0 0 0.5rem', color: '#334155' }}><strong>Where:</strong> {event.location || 'Not specified'}</p>
+                    <p style={{ margin: '0 0 0.75rem', color: '#334155', whiteSpace: 'pre-wrap' }}><strong>About:</strong> {event.description || 'No description provided.'}</p>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#334155', fontSize: '0.9rem' }}>
+                      <span><strong>Registered:</strong> {event.registered_count || 0} / {event.capacity || '—'}</span>
+                      <span><strong>Checked in:</strong> {event.attended_count || 0}</span>
+                      <span><strong>Budget:</strong> ₹{Number(event.budget || 0).toLocaleString()}</span>
+                      <span><strong>Feedback:</strong> {event.feedback_count || 0} ({event.positive_feedback_count || 0} positive)</span>
+                    </div>
+                    <div style={{ marginTop: '0.75rem', color: '#334155', fontSize: '0.9rem' }}>
+                      <strong>Event Organization:</strong>
+                      <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>
+                        <li><strong>Department:</strong> {event.department || 'University Wide'}</li>
+                        <li><strong>Dept Coordinator:</strong> {event.dept_coordinator_name || 'None Assigned'}</li>
+                        <li><strong>Club Name:</strong> {event.club_name || 'N/A'}</li>
+                      </ul>
+                    </div>
+                    <div style={{ marginTop: '0.75rem', color: '#334155', fontSize: '0.9rem' }}>
+                      <strong>Club event team:</strong>
+                      {event.organizers?.length ? (
+                        <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>
+                          {event.organizers.map((organizer, index) => (
+                            <li key={`${organizer.role}-${organizer.name}-${index}`}>
+                              {organizer.name} ({organizer.role.replaceAll('_', ' ')})
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <span> No club coordinator, president, head, or core member is assigned.</span>}
+                    </div>
+                  </section>
+                )}
                 
-                {/* ADMIN UI (Event Approval Flow) */}
+                {/* ADMIN UI (Event Completion Flow) */}
                 {user.role === 'admin' && (
                   <div style={{ marginTop: 'auto' }}>
-                    {event.state === 'pending_admin_initial' && (
+                    {false && event.state === 'pending_admin_initial' && (
                       <>
                         <button onClick={() => handleApproveAdminInitial(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
                           ✅ Send Budget to Finance
@@ -857,7 +911,7 @@ const AdminDashboard = () => {
                         </div>
                       </>
                     )}
-                    {event.state === 'pending_admin_final' && (
+                    {false && event.state === 'pending_admin_final' && (
                       <>
                         <button onClick={() => handleApproveAdminFinal(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
                           ✅ Send Final Approval to Coordinator
@@ -881,24 +935,24 @@ const AdminDashboard = () => {
                 )}
 
                 {/* FINANCE ROLE SPECIFIC UI */}
-                {['admin', 'finance'].includes(user.role) && (
+                {user.role === 'finance' && (
                   <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                     <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#047857' }}>💰 Financial Status & Estimations</p>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
                       <span>Allocated Budget: ₹{(event.budget || 0).toLocaleString()}</span>
                       <span>Est. Expenses: ₹{(event.registered_count * 200).toLocaleString()}</span>
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#065f46', marginTop: '0.5rem' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#065f46', marginTop: '0.5rem', marginBottom: '0.75rem' }}>
                       {event.accessories_req && <div style={{ marginBottom: '0.25rem' }}><strong>Accessories:</strong> {event.accessories_req}</div>}
                       {event.guests_req && <div style={{ marginBottom: '0.25rem' }}><strong>Guests:</strong> {event.guests_req}</div>}
                       {event.gifts_req && <div style={{ marginBottom: '0.25rem' }}><strong>Gifts:</strong> {event.gifts_req}</div>}
                       {event.prizes_req && <div style={{ marginBottom: '0.25rem' }}><strong>Prizes:</strong> {event.prizes_req}</div>}
                     </div>
                     {/* FINANCE APPROVAL UI */}
-                    {event.state === 'pending_finance' && (
+                    {user.role === 'finance' && event.state === 'pending_finance' && (
                       <>
                         <button onClick={() => handleApproveBudget(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none', marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                          💰 Approve Budget (Back to Admin)
+                          💰 Approve Budget (Send to Coordinator)
                         </button>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
                           <button onClick={() => handleRequestChanges(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fffbeb', color: '#d97706', borderColor: '#d97706' }}>
@@ -910,32 +964,43 @@ const AdminDashboard = () => {
                         </div>
                       </>
                     )}
-                    {event.state === 'finance_review' && (
+                    {user.role === 'finance' && ['finance_review', 'completed'].includes(event.state) && (
                       <>
                         <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '0.5rem', borderRadius: '6px', marginTop: '0.5rem', marginBottom: '0.5rem', color: '#166534', fontSize: '0.85rem' }}>
                           <strong>Submitted Actual Expenses:</strong> ₹{event.actual_expenses?.toLocaleString()}
+                          {event.expenses_file_url && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                              <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer" style={{ color: '#047857', textDecoration: 'underline' }}>
+                                📄 Download Expense CSV Report
+                              </a>
+                            </div>
+                          )}
                         </div>
-                        <button onClick={() => handleVerifyExpenses(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981', color: 'white', border: 'none', marginBottom: '0.5rem' }}>
-                          ✅ Verify Expenses (Send to Admin)
-                        </button>
+                        {event.state === 'finance_review' && (
+                          <button onClick={() => handleVerifyExpenses(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981', color: 'white', border: 'none', marginBottom: '0.5rem' }}>
+                            ✅ Verify Expenses & Mark Event Completed
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
                 )}
 
                 {/* GENERAL ANALYTICS (All Roles) */}
-                <div style={{ background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                  <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--secondary)' }}>Performance Analytics</p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                    <span>👥 Registrations: {event.registered_count} / {event.capacity}</span>
-                    <span>📈 Feedback: {event.feedback_count}</span>
+                {user.role !== 'finance' && (
+                  <div style={{ background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                    <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--secondary)' }}>Performance Analytics</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                      <span>👥 Registrations: {event.registered_count} / {event.capacity}</span>
+                      <span>📈 Feedback: {event.feedback_count}</span>
+                    </div>
+                    {event.feedback_count > 0 && (
+                      <button onClick={() => handleViewFeedback(event.id)} className="btn-secondary" style={{ width: '100%', fontSize: '0.8rem', padding: '0.25rem' }}>
+                        🔍 View AI Feedback Analysis
+                      </button>
+                    )}
                   </div>
-                  {event.feedback_count > 0 && (
-                    <button onClick={() => handleViewFeedback(event.id)} className="btn-secondary" style={{ width: '100%', fontSize: '0.8rem', padding: '0.25rem' }}>
-                      🔍 View AI Feedback Analysis
-                    </button>
-                  )}
-                </div>
+                )}
 
                 <div style={{ marginTop: 'auto' }}>
                   {/* ADMIN UI */}
@@ -959,8 +1024,8 @@ const AdminDashboard = () => {
                     </>
                   )}
 
-                  {/* Admin Certificate Generation & Template Upload */}
-                  {user.role === 'admin' && event.state === 'completed' && (
+                  {/* Coordinator Certificate Generation & Template Upload */}
+                  {['admin', 'coordinator'].includes(user.role) && event.state === 'completed' && (
                     <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px' }}>
                       <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981', fontSize: '0.9rem' }}>🎓 Certificate Management</p>
                       
@@ -1045,10 +1110,23 @@ const AdminDashboard = () => {
                         </button>
                       )}
 
-                      {/* Close Event Button */}
+                      {/* Upload Expense CSV (Coordinator) */}
+                      {['published', 'finance_review', 'completed'].includes(event.state) && (
+                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
+                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>📤 Upload Expense CSV for Finance (Optional):</label>
+                          <input 
+                            type="file" 
+                            accept=".csv"
+                            onChange={(e) => handleUploadExpenses(event.id, e.target.files[0])}
+                            className="input-glass"
+                            style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
+                          />
+                        </div>
+                      )}
+
                       {event.state === 'published' && (
                         <button onClick={() => handleCloseEvent(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#dc2626', borderColor: '#dc2626' }}>
-                          🛑 Submit Expense Report & Close (Send to Finance)
+                          🛑 Submit Expenses & Close (Send to Finance)
                         </button>
                       )}
 
@@ -1066,9 +1144,9 @@ const AdminDashboard = () => {
                       )}
 
                       {/* Upload Attendance File */}
-                      {['published', 'finance_review', 'pending_completion'].includes(event.state) && (
+                      {['published', 'finance_review', 'pending_completion', 'completed'].includes(event.state) && (
                         <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>📤 Upload Final Results (CSV) for Admin:</label>
+                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>🏆 Upload Final Results (CSV for Certificates):</label>
                           <input 
                             type="file" 
                             accept=".csv"

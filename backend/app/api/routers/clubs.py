@@ -213,7 +213,8 @@ def list_members(club_id: int, db: Session = Depends(get_db)):
             activity_points=mem.activity_points,
             user_name=user.name if user else "Unknown",
             user_email=user.email if user else "Unknown",
-            user_department=user.department if user else None
+            user_department=user.department if user else None,
+            global_role=user.role if user else None
         ))
     return result
 

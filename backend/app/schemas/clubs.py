@@ -38,6 +38,7 @@ class ClubMembershipResponse(ClubMembershipBase):
     user_name: str
     user_email: str
     user_department: Optional[str] = None
+    global_role: Optional[str] = None
 
     class Config:
         from_attributes = True
