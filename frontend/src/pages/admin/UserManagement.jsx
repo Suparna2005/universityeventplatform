@@ -14,18 +14,23 @@ const UserManagement = ({ externalActiveTab }) => {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [usersList, setUsersList] = useState([]);
+  const [clubsList, setClubsList] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
   const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [requestsError, setRequestsError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('All');
+  const [filterClub, setFilterClub] = useState('All');
   const [activeTab, setActiveTab] = useState(externalActiveTab || 'coordinator');
   const baseURL = '';
   const [editingUserId, setEditingUserId] = useState(null);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
-  const [assignDept, setAssignDept] = useState('');
   const [assignFacultyId, setAssignFacultyId] = useState('');
+  const [assignUserSearch, setAssignUserSearch] = useState('');
+  const [assignClubSearch, setAssignClubSearch] = useState('');
+  const [assignClubId, setAssignClubId] = useState('');
 
   const showAlert = (message, isError = false) => {
     setAlertModal({ isOpen: true, title: isError ? 'Error' : 'Success', message, isError });
@@ -47,19 +52,21 @@ const UserManagement = ({ externalActiveTab }) => {
     setRequestsLoading(true);
     setRequestsError('');
     const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
-    const [users, joins, leaves] = await Promise.allSettled([
+    const [users, joins, leaves, clubs] = await Promise.allSettled([
       axios.get(`${baseURL}/api/admin/users`, { headers }),
       axios.get(`${baseURL}/api/admin/club-requests`, { headers }),
-      axios.get(`${baseURL}/api/admin/club-leave-requests`, { headers })
+      axios.get(`${baseURL}/api/admin/club-leave-requests`, { headers }),
+      axios.get(`${baseURL}/api/clubs/list`)
     ]);
     if (users.status === 'fulfilled') setUsersList(users.value.data);
     if (joins.status === 'fulfilled') setPendingRequests(joins.value.data);
     if (leaves.status === 'fulfilled') setPendingLeaveRequests(leaves.value.data);
+    if (clubs.status === 'fulfilled') setClubsList(clubs.value.data);
     const failedRequest = [joins, leaves].find(result => result.status === 'rejected');
     if (failedRequest) {
       setRequestsError(failedRequest.reason.response?.data?.detail || failedRequest.reason.message || 'Could not load pending requests');
     }
-    [users, joins, leaves].forEach(result => {
+    [users, joins, leaves, clubs].forEach(result => {
       if (result.status === 'rejected') console.error('Failed to fetch admin data', result.reason);
     });
     setRequestsLoading(false);
@@ -121,6 +128,9 @@ const UserManagement = ({ externalActiveTab }) => {
     e.preventDefault();
     setMessage('');
     setError('');
+    
+    const targetRole = formData.role.toLowerCase().trim();
+
     try {
       if (editingUserId) {
         await axios.put(`${baseURL}/api/admin/users/${editingUserId}`, formData, {
@@ -143,36 +153,48 @@ const UserManagement = ({ externalActiveTab }) => {
 
   const handleAssignCoordinator = async (e) => {
     e.preventDefault();
-    if (!assignDept || !assignFacultyId) return;
-    
-    const targetUser = usersList.find(u => u.id.toString() === assignFacultyId.toString());
+    const isClubCoordinator = formData.role === 'club_coordinator';
+    if (!assignFacultyId || (!isClubCoordinator && !formData.department) || (isClubCoordinator && !assignClubId)) return;
+
+    const targetUser = usersList.find(u => String(u.id) === String(assignFacultyId));
     if (!targetUser) return;
 
     try {
-      await axios.put(`${baseURL}/api/admin/users/${targetUser.id}`, {
-        name: targetUser.name,
-        email: targetUser.email,
-        password: '',
-        role: 'coordinator',
-        department: assignDept
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      showAlert(`Successfully promoted ${targetUser.name} to Department Coordinator!`);
-      setAssignDept('');
+      const headers = { Authorization: `Bearer ${localStorage.getItem('token')}` };
+      if (isClubCoordinator) {
+        await axios.post(`${baseURL}/api/admin/assign-club-coordinator`, {
+          user_id: targetUser.id,
+          club_id: Number(assignClubId)
+        }, { headers });
+        showAlert(`Assigned ${targetUser.name} as club coordinator.`);
+      } else {
+        await axios.post(`${baseURL}/api/admin/assign-department-coordinator`, {
+          user_id: targetUser.id,
+          department: formData.department
+        }, { headers });
+        showAlert(`Promoted ${targetUser.name} to Department Coordinator.`);
+      }
       setAssignFacultyId('');
-      fetchUsers();
+      setAssignUserSearch('');
+      setAssignClubSearch('');
+      setAssignClubId('');
+      setFormData({ name: '', email: '', password: '', role: '', department: '' });
+      await fetchUsers();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error promoting user');
+      setError(err.response?.data?.detail || 'Could not assign coordinator');
     }
   };
 
-  // Filter users based on search
-  const searchedUsers = usersList.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.department && u.department.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // Filter users based on search and department/club dropdowns
+  const searchedUsers = usersList.filter(u => {
+    const matchesSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (u.department && u.department.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                          (u.clubs && u.clubs.some(c => c.club_name.toLowerCase().includes(searchQuery.toLowerCase())));
+    const matchesDept = filterDepartment === 'All' || u.department === filterDepartment;
+    const matchesClub = filterClub === 'All' || (u.clubs && u.clubs.some(c => c.club_name === filterClub));
+    return matchesSearch && matchesDept && matchesClub;
+  });
 
   // Derive sections
   const coordinators = searchedUsers.filter(u => u.role === 'coordinator');
@@ -217,7 +239,13 @@ const UserManagement = ({ externalActiveTab }) => {
       case 'faculty': return faculty;
       case 'student': return students;
       case 'admin': return admins;
-      default: return searchedUsers;
+      case 'requests_faculty': return [];
+      case 'requests_student': return [];
+      default: 
+        if (!['coordinator', 'club_coordinator', 'finance', 'faculty', 'student', 'admin'].includes(activeTab)) {
+          return searchedUsers.filter(u => u.role === activeTab);
+        }
+        return searchedUsers;
     }
   };
 
@@ -232,6 +260,7 @@ const UserManagement = ({ externalActiveTab }) => {
             <th style={{ padding: '1rem 0.5rem' }}>Email</th>
             <th style={{ padding: '1rem 0.5rem' }}>Role</th>
             <th style={{ padding: '1rem 0.5rem' }}>Department</th>
+            <th style={{ padding: '1rem 0.5rem' }}>Clubs</th>
             <th style={{ padding: '1rem 0.5rem' }}>Generated By</th>
             <th style={{ padding: '1rem 0.5rem', textAlign: 'right' }}>Actions</th>
           </tr>
@@ -251,6 +280,11 @@ const UserManagement = ({ externalActiveTab }) => {
                 </span>
               </td>
               <td style={{ padding: '1rem 0.5rem' }}>{u.department || '-'}</td>
+              <td style={{ padding: '1rem 0.5rem', color: 'var(--text-muted)' }}>
+                {u.clubs && u.clubs.length > 0 ? (
+                  <span style={{ fontSize: '0.85rem' }}>{u.clubs.map(c => c.club_name).join(', ')}</span>
+                ) : '-'}
+              </td>
               <td style={{ padding: '1rem 0.5rem', color: 'var(--text-muted)' }}>
                 {u.created_by_role ? (
                   <span style={{ fontSize: '0.85rem', textTransform: 'capitalize' }}>{u.created_by_role}</span>
@@ -276,7 +310,7 @@ const UserManagement = ({ externalActiveTab }) => {
           ))}
           {users.length === 0 && (
             <tr>
-              <td colSpan={activeTab === 'club_members' ? 7 : 6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+              <td colSpan={7} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                 No users found in this section.
               </td>
             </tr>
@@ -314,6 +348,37 @@ const UserManagement = ({ externalActiveTab }) => {
   const facultyLeaveRequests = pendingLeaveRequests.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase()));
   const studentLeaveRequests = pendingLeaveRequests.filter(r => r.role && r.role.toLowerCase() === 'student');
 
+  const customRoles = [...new Set(searchedUsers.map(u => u.role).filter(r => !['coordinator', 'club_coordinator', 'finance', 'faculty', 'student', 'admin'].includes(r)))].sort();
+  const customTabs = customRoles.map(role => ({
+    id: role,
+    label: role.charAt(0).toUpperCase() + role.slice(1).replace(/_/g, ' ') + 's',
+    count: searchedUsers.filter(u => u.role === role).length
+  }));
+
+  const departments = [...new Set([
+    ...usersList.map(user => user.department),
+    ...clubsList.map(club => club.department)
+  ].filter(Boolean))].sort();
+  const isCoordinatorAssignment = !editingUserId && ['coordinator', 'club_coordinator'].includes(formData.role);
+  const assignmentUsers = usersList.filter(user => {
+    const role = String(user.role).toLowerCase();
+    const eligibleRole = formData.role === 'coordinator'
+      ? role === 'faculty'
+      : ['student', 'faculty', 'coordinator'].includes(role);
+    const departmentMatches = formData.role === 'coordinator'
+      ? user.department === formData.department
+      : !formData.department || user.department === formData.department;
+    const search = assignUserSearch.trim().toLowerCase();
+    const searchMatches = !search || `${user.name} ${user.email} ${user.role} ${user.department || ''}`.toLowerCase().includes(search);
+    return eligibleRole && departmentMatches && searchMatches;
+  });
+  const assignmentClubs = clubsList.filter(club => {
+    const departmentMatches = !formData.department || !club.department || club.department === formData.department;
+    const search = assignClubSearch.trim().toLowerCase();
+    const searchMatches = !search || `${club.name} ${club.department || ''}`.toLowerCase().includes(search);
+    return departmentMatches && searchMatches;
+  });
+
   const tabs = [
     { id: 'coordinator', label: 'Dept Coordinators', count: coordinators.length },
     { id: 'club_coordinator', label: 'Club Coordinators', count: clubCoordinators.length },
@@ -321,6 +386,7 @@ const UserManagement = ({ externalActiveTab }) => {
     { id: 'faculty', label: 'Faculty', count: faculty.length },
     { id: 'student', label: 'All Dept Students', count: students.length },
     { id: 'admin', label: 'Admins', count: admins.length },
+    ...customTabs,
     { id: 'requests_faculty', label: 'Faculty Requests', count: facultyRequests.length + facultyLeaveRequests.length },
     { id: 'requests_student', label: 'Student Requests', count: studentRequests.length + studentLeaveRequests.length }
   ];
@@ -406,69 +472,151 @@ const UserManagement = ({ externalActiveTab }) => {
         {message && <div style={{ padding: '1rem', background: '#dcfce7', color: '#166534', borderRadius: '6px', marginBottom: '1rem' }}>{message}</div>}
         {error && <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '6px', marginBottom: '1rem' }}>{error}</div>}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Full Name</label>
-            <input type="text" className="input-glass" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-          </div>
+        <form onSubmit={isCoordinatorAssignment ? handleAssignCoordinator : handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
           
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>University Email</label>
-            <input type="email" className="input-glass" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-          </div>
-
-          <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              {editingUserId ? "New Password (Optional)" : "Temporary Password"}
-            </label>
-            <input type="text" className="input-glass" required={!editingUserId} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder={editingUserId ? "Leave blank to keep same" : ""} />
-          </div>
-
-          <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>System Role</label>
-            <select 
+            <select
               className="input-glass"
               required
               value={formData.role}
-              onChange={e => setFormData({...formData, role: e.target.value})}
+              onChange={e => {
+                setFormData({ ...formData, role: e.target.value, department: editingUserId ? formData.department : '' });
+                setAssignFacultyId('');
+                setAssignUserSearch('');
+                setAssignClubId('');
+                setAssignClubSearch('');
+              }}
             >
               <option value="" disabled>Select a role...</option>
-              <option value="faculty">Faculty</option>
-              <option value="admin">Admin</option>
-              <option value="finance">Finance</option>
               <option value="student">Student</option>
-              {editingUserId && (
-                <>
-                  <option value="coordinator">Department Coordinator</option>
-                  <option value="club_coordinator">Club Coordinator</option>
-                </>
-              )}
+              <option value="faculty">Faculty</option>
+              <option value="coordinator">Department Coordinator</option>
+              <option value="club_coordinator">Club Coordinator</option>
+              <option value="finance">Finance</option>
+              <option value="admin">Admin</option>
+              <option value="mentor">Mentor</option>
             </select>
           </div>
 
           <div>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Department</label>
-            <input 
-              list="dept-options"
-              type="text"
-              className="input-glass"
-              value={formData.department}
-              onChange={e => setFormData({...formData, department: e.target.value})}
-              placeholder="Select existing or type a new one..."
-            />
-            <datalist id="dept-options">
-              {[...new Set(["CSE", "ECE", "ME", "EE", "CE", "BBA", "BCA", ...usersList.map(u => u.department).filter(Boolean)])].sort().map(d => (
-                <option key={d} value={d} />
-              ))}
-            </datalist>
-            <small style={{ color: 'var(--text-muted)', display: 'block', marginTop: '0.4rem' }}>
-              Leave blank for System Wide (e.g. Admin/Finance). You can type any new department name here.
-            </small>
+            {isCoordinatorAssignment ? (
+              <select
+                className="input-glass"
+                required={formData.role === 'coordinator'}
+                value={formData.department}
+                onChange={e => {
+                  setFormData({ ...formData, department: e.target.value });
+                  setAssignFacultyId('');
+                }}
+              >
+                <option value="">{formData.role === 'coordinator' ? 'Select department...' : 'All departments'}</option>
+                {departments.map(department => <option key={department} value={department}>{department}</option>)}
+              </select>
+            ) : (
+              <input
+                list="dept-options"
+                type="text"
+                className="input-glass"
+                value={formData.department}
+                onChange={e => setFormData({ ...formData, department: e.target.value })}
+                placeholder="Select existing or type a new one..."
+              />
+            )}
+            {!isCoordinatorAssignment && <datalist id="dept-options">
+              {departments.map(department => <option key={department} value={department} />)}
+            </datalist>}
           </div>
+
+          {isCoordinatorAssignment ? (
+            formData.role === 'coordinator' ? (
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Faculty in {formData.department || 'selected department'}</label>
+                <select
+                  className="input-glass"
+                  value={assignFacultyId}
+                  onChange={e => setAssignFacultyId(e.target.value)}
+                  disabled={!formData.department}
+                  required
+                >
+                  <option value="" disabled>{formData.department ? 'Choose faculty...' : 'Select department first'}</option>
+                  {assignmentUsers.map(user => <option key={user.id} value={user.id}>{user.name} ({user.email})</option>)}
+                </select>
+                {formData.department && assignmentUsers.length === 0 && <small>No faculty found in this department.</small>}
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Find eligible user</label>
+                  <input
+                    type="search"
+                    className="input-glass"
+                    placeholder="Search name, email, role, or department..."
+                    value={assignUserSearch}
+                    onChange={e => { setAssignUserSearch(e.target.value); setAssignFacultyId(''); }}
+                  />
+                  <select
+                    className="input-glass"
+                    style={{ marginTop: '0.5rem' }}
+                    value={assignFacultyId}
+                    onChange={e => setAssignFacultyId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Select a user...</option>
+                    {assignmentUsers.map(user => <option key={user.id} value={user.id}>{user.name} - {user.role} - {user.department || 'No department'}</option>)}
+                  </select>
+                  {assignmentUsers.length === 0 && <small>No eligible users match these filters.</small>}
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Assign to club</label>
+                  <input
+                    type="search"
+                    className="input-glass"
+                    placeholder="Search clubs by name or department..."
+                    value={assignClubSearch}
+                    onChange={e => { setAssignClubSearch(e.target.value); setAssignClubId(''); }}
+                  />
+                  <select
+                    className="input-glass"
+                    style={{ marginTop: '0.5rem' }}
+                    value={assignClubId}
+                    onChange={e => setAssignClubId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Select a club...</option>
+                    {assignmentClubs.map(club => <option key={club.id} value={club.id}>{club.name}{club.department ? ` - ${club.department}` : ''}</option>)}
+                  </select>
+                  {assignmentClubs.length === 0 && <small>No clubs match this search and department.</small>}
+                </div>
+              </>
+            )
+          ) : (
+            <>
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Full Name</label>
+                <input type="text" className="input-glass" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+              
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>University Email</label>
+                <input type="email" className="input-glass" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
+                  {editingUserId ? "New Password (Optional)" : "Temporary Password"}
+                </label>
+                <input type="text" className="input-glass" required={!editingUserId} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} placeholder={editingUserId ? "Leave blank to keep same" : ""} />
+              </div>
+            </>
+          )}
 
           <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
             <button type="submit" className="btn-primary" style={{ flex: 1, padding: '0.8rem' }}>
-              {editingUserId ? "Update User" : "Generate"}
+              {isCoordinatorAssignment
+                ? (formData.role === 'coordinator' ? "Assign Department Coordinator" : "Assign Club Coordinator")
+                : (editingUserId ? "Update User" : "Generate User")}
             </button>
             {editingUserId && (
               <button 
@@ -487,63 +635,14 @@ const UserManagement = ({ externalActiveTab }) => {
             )}
           </div>
         </form>
-        </div>
 
-        {/* Assign Dept Coordinator Form */}
-        <div className="glass-card" style={{ padding: '2rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-            <Award size={28} color="var(--primary)" />
-            <h2 style={{ margin: 0, color: 'var(--primary)', fontSize: '1.4rem' }}>Assign Coordinator</h2>
-          </div>
-          <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-            Select an existing faculty member to promote them to Department Coordinator.
-          </p>
-          
-          <form onSubmit={handleAssignCoordinator} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Select Department</label>
-              <select className="input-glass" value={assignDept} onChange={e => {setAssignDept(e.target.value); setAssignFacultyId('');}} required>
-                <option value="" disabled>Choose Department...</option>
-                {[...new Set(["CSE", "ECE", "ME", "EE", "CE", "BBA", "BCA", ...usersList.map(u => u.department).filter(Boolean)])].sort().map(d => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </div>
-            
-            {assignDept && (
-              <div>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>Select Faculty</label>
-                <select className="input-glass" value={assignFacultyId} onChange={e => setAssignFacultyId(e.target.value)} required>
-                  <option value="" disabled>Choose a faculty member...</option>
-                  {usersList.filter(u => (u.role === 'faculty' || u.role === 'coordinator') && u.department === assignDept).map(f => (
-                    <option key={f.id} value={f.id}>{f.name} ({f.email})</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
-            <button type="submit" className="btn-primary" style={{ padding: '0.8rem', marginTop: '0.5rem' }} disabled={!assignDept || !assignFacultyId}>
-              Promote to Coordinator
-            </button>
-          </form>
         </div>
       </div>
 
       {/* RIGHT: List of Users grouped by section */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
         
-        {/* Search Bar */}
-        <div className="glass-card" style={{ padding: '1rem 2rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Search color="var(--text-muted)" />
-          <input 
-            type="text" 
-            placeholder="Search users by name, email, or department..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: '1rem' }}
-          />
-        </div>
-
         <div className="glass-card" style={{ padding: '2rem', minHeight: '600px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -588,6 +687,52 @@ const UserManagement = ({ externalActiveTab }) => {
               </button>
             ))}
           </div>
+
+          {/* Search & Filter Controls */}
+          {!activeTab.startsWith('requests') && (
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                <Filter size={18} color="var(--text-muted)" />
+                <select 
+                  value={filterDepartment} 
+                  onChange={e => setFilterDepartment(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.9rem', color: 'var(--text-primary)' }}
+                >
+                  <option value="All">All Departments</option>
+                  {[...new Set(["CSE", "ECE", "ME", "EE", "CE", "BBA", "BCA", ...usersList.map(u => u.department).filter(Boolean)])].sort().map(d => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                <Filter size={18} color="var(--text-muted)" />
+                <select 
+                  value={filterClub} 
+                  onChange={e => setFilterClub(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.9rem', color: 'var(--text-primary)' }}
+                >
+                  <option value="All">All Clubs</option>
+                  {[...new Set(usersList.flatMap(u => u.clubs?.map(c => c.club_name)).filter(Boolean))].sort().map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--glass-border)', width: '300px' }}>
+                <Search size={18} color="var(--text-muted)" />
+                <input 
+                  type="text" 
+                  placeholder="Search user or club..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, fontSize: '0.9rem' }}
+                />
+              </div>
+
+            </div>
+          )}
 
           {/* Table */}
           {activeTab.startsWith('requests') ? renderRequestsTable(activeTab) : activeTab === 'student' ? renderStudentTableGrouped(activeUsers) : renderTable(activeUsers)}

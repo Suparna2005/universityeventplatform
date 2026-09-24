@@ -56,6 +56,67 @@ class AdminUserUpdate(BaseModel):
     role: str
     department: str = ""
 
+class ClubCoordinatorAssignment(BaseModel):
+    user_id: int
+    club_id: int
+
+class DepartmentCoordinatorAssignment(BaseModel):
+    user_id: int
+    department: str
+
+@router.post("/assign-department-coordinator")
+def assign_department_coordinator(request: DepartmentCoordinatorAssignment, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    target = db.query(User).filter(User.id == request.user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target.role).lower() != "faculty":
+        raise HTTPException(status_code=400, detail="Department coordinators must be selected from faculty")
+    selected_department = request.department.strip()
+    faculty_department = (target.department or "").strip()
+    if not selected_department or faculty_department.casefold() != selected_department.casefold():
+        raise HTTPException(status_code=400, detail="Faculty member must belong to the selected department")
+
+    target.role = RoleEnum.coordinator
+    db.commit()
+    return {"message": f"{target.name} assigned as Department Coordinator for {target.department}"}
+
+@router.post("/assign-club-coordinator")
+def assign_club_coordinator(request: ClubCoordinatorAssignment, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+
+    from app.models.user import Club, ClubMembership
+    target = db.query(User).filter(User.id == request.user_id).first()
+    club = db.query(Club).filter(Club.id == request.club_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+    if str(target.role).lower() not in {"student", "faculty", "coordinator", "club_coordinator"}:
+        raise HTTPException(status_code=400, detail="Choose a student, faculty member, or department coordinator")
+
+    membership = db.query(ClubMembership).filter(
+        ClubMembership.club_id == club.id,
+        ClubMembership.user_id == target.id,
+    ).first()
+    if membership:
+        membership.role = ClubMemberRole.club_coordinator
+    else:
+        db.add(ClubMembership(
+            user_id=target.id,
+            club_id=club.id,
+            role=ClubMemberRole.club_coordinator,
+            club_department=target.department or club.department,
+        ))
+
+    if str(target.role).lower() in {"student", "faculty"}:
+        target.role = RoleEnum.club_coordinator
+    db.commit()
+    return {"message": f"{target.name} assigned as coordinator of {club.name}"}
+
 @router.put("/users/{user_id}")
 def update_user(user_id: int, request: AdminUserUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.admin:

@@ -1,7 +1,20 @@
 Traceback (most recent call last):
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.ForeignKeyViolation: update or delete on table "users" violates foreign key constraint "events_coordinator_id_fkey" on table "events"
+DETAIL:  Key (id)=(90) is still referenced from table "events".
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
     await self.app(scope, receive, _send)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 85, in __call__
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 93, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\cors.py", line 148, in simple_response
     await self.app(scope, receive, send)
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\starlette\middleware\exceptions.py", line 65, in __call__
     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
@@ -35,6 +48,55 @@ Traceback (most recent call last):
     return await future
   File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\anyio\_backends\_asyncio.py", line 986, in run
     result = context.run(func, *args)
-  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\auth.py", line 54, in read_users_me
-    res["year"] = stu.year
-AttributeError: 'Student' object has no attribute 'year'
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\app\api\routers\admin.py", line 96, in delete_user
+    db.commit()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 2017, in commit
+    trans.commit(_to_root=True)
+  File "<string>", line 2, in commit
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1302, in commit
+    self._prepare_impl()
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 1277, in _prepare_impl
+    self.session.flush()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4341, in flush
+    self._flush(objects)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4477, in _flush
+    transaction.rollback(_capture_exception=True)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\util\langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\session.py", line 4437, in _flush
+    flush_context.execute()
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in execute
+    rec.execute(self)
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\unitofwork.py", line 679, in execute
+    util.preloaded.orm_persistence.delete_obj(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\persistence.py", line 193, in delete_obj
+    _emit_delete_statements(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\orm\persistence.py", line 1465, in _emit_delete_statements
+    c = connection.execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1418, in execute
+    return meth(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\sql\elements.py", line 515, in _execute_on_connection
+    return connection._execute_clauseelement(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1640, in _execute_clauseelement
+    ret = self._execute_context(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1986, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 2353, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+  File "C:\Users\supar\Downloads\universityevemng\university-event-platform\backend\venv\lib\site-packages\sqlalchemy\engine\default.py", line 924, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.IntegrityError: (psycopg2.errors.ForeignKeyViolation) update or delete on table "users" violates foreign key constraint "events_coordinator_id_fkey" on table "events"
+DETAIL:  Key (id)=(90) is still referenced from table "events".
+
+[SQL: DELETE FROM users WHERE users.id = %(id)s]
+[parameters: {'id': 90}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
