@@ -1031,18 +1031,18 @@ def get_roles(current_user: User = Depends(get_current_user), db: Session = Depe
                 "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
                 "finance": {"view_expenses": False, "verify_expenses": False},
                 "system_setup": {"manage_departments": False, "manage_roles": False},
-                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": False}
             }
         },
         "club_coordinator": {
             "dashboard_type": "admin",
             "permissions": {
-                "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
+                "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": False},
                 "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
                 "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
                 "finance": {"view_expenses": False, "verify_expenses": False},
                 "system_setup": {"manage_departments": False, "manage_roles": False},
-                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": False, "join_clubs_via_coordinator": False}
             }
         },
         "finance": {
