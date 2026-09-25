@@ -13,14 +13,18 @@ const ProtectedRoute = ({ children, allowedRoles, adminOrClubAdmin }) => {
   if (!user) return <Navigate to="/login" replace />;
 
   if (adminOrClubAdmin) {
-    if (!['admin', 'coordinator', 'finance'].includes(user.role) && !user.is_club_admin) {
+    const isCoreAdmin = ['admin', 'coordinator', 'finance'].includes(user.role);
+    const hasAdminPermission = user.permissions?.dashboard_type === 'admin';
+    if (!isCoreAdmin && !user.is_club_admin && !hasAdminPermission) {
       return <Navigate to="/dashboard" replace />;
     }
     return children;
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    const fallback = ['student', 'faculty', 'mentor'].includes(user.role) ? "/dashboard" : "/admin";
+    const isCoreStudent = ['student', 'faculty', 'mentor'].includes(user.role);
+    const hasStudentPermission = user.permissions?.dashboard_type === 'student';
+    const fallback = (isCoreStudent || hasStudentPermission) ? "/dashboard" : "/admin";
     return <Navigate to={fallback} replace />;
   }
   return children;
@@ -31,7 +35,9 @@ function AppRoutes() {
   
   const getHomeRoute = () => {
     if (!user) return "/login";
-    return ['student', 'faculty', 'mentor'].includes(user.role) ? "/dashboard" : "/admin";
+    const isCoreStudent = ['student', 'faculty', 'mentor'].includes(user.role);
+    const hasStudentPermission = user.permissions?.dashboard_type === 'student';
+    return (isCoreStudent || hasStudentPermission) ? "/dashboard" : "/admin";
   };
 
   return (

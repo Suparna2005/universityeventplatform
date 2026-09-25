@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Brain, UserCircle, QrCode } from 'lucide-react';
+import { Brain, UserCircle, QrCode, Settings } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import BudgetDashboard from './BudgetDashboard';
 import AnalyticsDashboard from './AnalyticsDashboard';
@@ -13,6 +13,7 @@ import AdminClubApprovals from './AdminClubApprovals';
 import StudentManagement from './StudentManagement';
 import ChangePasswordModal from '../ChangePasswordModal';
 import { PromptModal, ConfirmModal } from '../../components/Modals';
+import SystemSetupModal from '../../components/SystemSetupModal';
 
 const getEventTimelineStatus = (event) => {
   if (event.state === 'completed') return 'Completed';
@@ -38,6 +39,7 @@ const AdminDashboard = () => {
   
   const [aiPrompts, setAiPrompts] = useState({});
   const [aiLoading, setAiLoading] = useState({});
+  const [isSystemSetupOpen, setIsSystemSetupOpen] = useState(false);
   const [newEvent, setNewEvent] = useState({
     title: '', description: '', date: '', end_date: '', location: '', capacity: '', budget: '',
     accessories_req: '', guests_req: '', gifts_req: '', prizes_req: '', club_id: ''
@@ -619,6 +621,65 @@ const AdminDashboard = () => {
           ]
         }
       ];
+    } else if (user.permissions && user.permissions.dashboard_type === 'admin') {
+      const perms = user.permissions.permissions || {};
+      const customMenu = [];
+      
+      if (perms.events?.view_events || perms.events?.approve_events) {
+        customMenu.push({
+          category: 'Events',
+          items: [
+            ...(perms.events?.view_events ? [
+              { id: 'admin_dash_events', label: 'All Events Overview' },
+              { id: 'admin_events_published', label: 'Published Events' },
+              { id: 'admin_events_completed', label: 'Completed Events' }
+            ] : []),
+            ...(perms.events?.approve_events ? [{ id: 'admin_events_pending', label: 'Pending Approvals' }] : [])
+          ]
+        });
+      }
+
+      if (perms.events?.scanner || perms.events?.registration_list || perms.events?.upload_attendance || perms.events?.manage_certificates) {
+        customMenu.push({
+          category: 'Event Operations',
+          items: [
+            ...(perms.events?.scanner ? [{ id: 'attendance_scanner', label: 'QR Code Scanner' }] : []),
+            ...(perms.events?.registration_list ? [{ id: 'participants_list', label: 'Registration List' }] : []),
+          ]
+        });
+      }
+
+      if (perms.users?.view_directory || perms.clubs?.view_clubs) {
+        customMenu.push({
+          category: 'Clubs & Users',
+          items: [
+            ...(perms.clubs?.view_clubs ? [
+              { id: 'admin_clubs_all', label: 'Manage Clubs' },
+              { id: 'admin_clubs_browse', label: 'Active Clubs Directory' }
+            ] : []),
+            ...(perms.users?.view_directory ? [{ id: 'admin_users_students', label: 'Manage Users' }] : [])
+          ]
+        });
+      }
+
+      if (perms.finance?.view_expenses || perms.finance?.verify_expenses) {
+        customMenu.push({
+          category: 'Finance Portal',
+          items: [
+            { id: 'pending_finance', label: 'Pending Budgets & Expenses' },
+          ]
+        });
+      }
+
+      customMenu.push({
+        category: 'Account',
+        items: [
+          { id: 'account_password', label: 'Change Password' },
+          { id: 'account_signout', label: 'Sign Out' },
+        ]
+      });
+
+      return customMenu;
     } else {
       // Coordinator Menu
       return [
@@ -738,6 +799,11 @@ const AdminDashboard = () => {
     }
   };
 
+  const canScan = () => user.role === 'coordinator' || user.permissions?.permissions?.events?.scanner;
+  const canUploadCSV = () => user.role === 'coordinator' || user.permissions?.permissions?.events?.upload_attendance;
+  const canManageCerts = () => ['admin', 'coordinator'].includes(user.role) || user.permissions?.permissions?.events?.manage_certificates;
+  const canViewRegistrationList = () => user.role === 'coordinator' || user.permissions?.permissions?.events?.registration_list;
+
   return (
     <div className="corporate-theme" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-gradient)' }}>
       {showChangePassword && (
@@ -797,6 +863,7 @@ const AdminDashboard = () => {
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
         <PromptModal {...promptModal} />
         <ConfirmModal {...confirmModal} />
+        <SystemSetupModal isOpen={isSystemSetupOpen} onClose={() => setIsSystemSetupOpen(false)} />
         
         {/* Top Header */}
         <header style={{ background: 'white', padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
@@ -807,6 +874,9 @@ const AdminDashboard = () => {
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.9rem', color: '#64748b' }}>Welcome, {user.name}</span>
+            <button onClick={() => setIsSystemSetupOpen(true)} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc' }}>
+              <Settings size={18} /> System Setup
+            </button>
             <button onClick={() => navigate('/dashboard')} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               Main Dashboard
             </button>
@@ -1187,7 +1257,7 @@ const AdminDashboard = () => {
                   )}
 
                   {/* Coordinator Certificate Generation & Template Upload */}
-                  {['admin', 'coordinator'].includes(user.role) && event.state === 'completed' && (
+                  {canManageCerts() && event.state === 'completed' && (
                     <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px' }}>
                       <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981', fontSize: '0.9rem' }}>🎓 Certificate Management</p>
                       
@@ -1253,7 +1323,7 @@ const AdminDashboard = () => {
                   )}
 
                   {/* COORDINATOR UI */}
-                  {user.role === 'coordinator' ? (
+                  {(user.role === 'coordinator' || canScan() || canUploadCSV()) ? (
                     <>
                       {/* Publish is strictly Coordinator only */}
                       {user.role === 'coordinator' && (
@@ -1295,21 +1365,20 @@ const AdminDashboard = () => {
                         </button>
                       )}
 
-                      {event.state === 'published' && (
+                      {event.state === 'published' && canScan() && (
                         <button onClick={() => startScanner(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                           <QrCode size={18} /> Scan QRs (Check-in)
                         </button>
                       )}
-
                       {/* Export Attendance Button */}
-                      {['published', 'pending_completion', 'completed'].includes(event.state) && (
+                      {['published', 'pending_completion', 'completed'].includes(event.state) && canViewRegistrationList() && (
                         <button onClick={() => handleExportRegistrations(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#047857', borderColor: '#047857' }}>
                           📊 Download Attendance CSV
                         </button>
                       )}
 
                       {/* Upload Attendance File */}
-                      {['published', 'finance_review', 'pending_completion', 'completed'].includes(event.state) && (
+                      {['published', 'finance_review', 'pending_completion', 'completed'].includes(event.state) && canUploadCSV() && (
                         <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
                             <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>🏆 Upload Final Results (CSV for Certificates):</label>

@@ -101,6 +101,8 @@ async def lifespan(app: FastAPI):
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE club_leave_requests ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'")
                 except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE system_roles ADD COLUMN permissions JSON DEFAULT '{}'")
+                except sqlite3.OperationalError: pass
                 conn.commit()
                 conn.close()
             except Exception as e:
@@ -147,7 +149,9 @@ async def lifespan(app: FastAPI):
                     "CREATE TABLE IF NOT EXISTS account_requests (id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, email VARCHAR NOT NULL, requested_role VARCHAR NOT NULL, department VARCHAR NOT NULL, year INTEGER, section VARCHAR, status accountrequeststatus DEFAULT 'pending' NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
                     "ALTER TABLE students ADD COLUMN year INTEGER",
                     "ALTER TABLE students ADD COLUMN section VARCHAR",
-                    "ALTER TABLE feedback ADD COLUMN user_id INTEGER REFERENCES users(id)"
+                    "ALTER TABLE feedback ADD COLUMN user_id INTEGER REFERENCES users(id)",
+                    "ALTER TABLE club_leave_requests ADD COLUMN status VARCHAR(50) NOT NULL DEFAULT 'pending'",
+                    "ALTER TABLE system_roles ADD COLUMN permissions JSON DEFAULT '{}'::json"
                 ]
                 with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
                     for q in queries:
@@ -158,6 +162,93 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"Postgres patch skipped: {e}")
             
+    # Seed default base roles
+    try:
+        from app.database import SessionLocal
+        from app.models.user import SystemRole
+        db = SessionLocal()
+        
+        default_roles = {
+            "admin": {
+                "dashboard_type": "admin",
+                "permissions": {
+                    "users": {"view_directory": True, "generate_users": True, "delete_users": True, "assign_coordinators": True, "manage_club_requests": True},
+                    "events": {"view_events": True, "approve_events": True, "delete_events": True, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                    "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": True},
+                    "finance": {"view_expenses": True, "verify_expenses": True},
+                    "system_setup": {"manage_departments": True, "manage_roles": True},
+                    "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+                }
+            },
+            "coordinator": {
+                "dashboard_type": "admin",
+                "permissions": {
+                    "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
+                    "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                    "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
+                    "finance": {"view_expenses": False, "verify_expenses": False},
+                    "system_setup": {"manage_departments": False, "manage_roles": False},
+                    "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+                }
+            },
+            "club_coordinator": {
+                "dashboard_type": "admin",
+                "permissions": {
+                    "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
+                    "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                    "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
+                    "finance": {"view_expenses": False, "verify_expenses": False},
+                    "system_setup": {"manage_departments": False, "manage_roles": False},
+                    "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+                }
+            },
+            "student": {
+                "dashboard_type": "student",
+                "permissions": {
+                    "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": False, "join_clubs_via_coordinator": True}
+                }
+            },
+            "faculty": {
+                "dashboard_type": "student",
+                "permissions": {
+                    "student_portal": {"view_events": True, "register_events": False, "view_recommendations": True, "view_certificates": False, "submit_feedback": False, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": False}
+                }
+            },
+            "finance": {
+                "dashboard_type": "admin",
+                "permissions": {
+                    "finance": {"view_expenses": True, "verify_expenses": True}
+                }
+            }
+        }
+        
+        for role_name, perms in default_roles.items():
+            existing = db.query(SystemRole).filter(SystemRole.name == role_name).first()
+            if not existing:
+                db.add(SystemRole(name=role_name, permissions=perms))
+            elif not existing.permissions or existing.permissions == {}:
+                existing.permissions = perms
+            else:
+                # Force update the join club permissions since they might have been saved as false
+                current_perms = dict(existing.permissions)
+                student_portal = current_perms.get("student_portal", {})
+                
+                # Check if this role is supposed to have these true in the defaults
+                default_sp = perms.get("student_portal", {})
+                student_portal["join_clubs_direct"] = default_sp.get("join_clubs_direct", False)
+                student_portal["join_clubs_via_coordinator"] = default_sp.get("join_clubs_via_coordinator", False)
+                current_perms["student_portal"] = student_portal
+                
+                # Force SQLAlchemy to update the JSON column
+                from sqlalchemy.orm.attributes import flag_modified
+                existing.permissions = current_perms
+                flag_modified(existing, "permissions")
+                    
+        db.commit()
+        db.close()
+    except Exception as e:
+        print(f"Role seeding skipped: {e}")
+
     yield
 
     # Teardown actions

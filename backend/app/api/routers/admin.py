@@ -8,7 +8,10 @@ from app.api.dependencies import get_current_user
 from app.models.user import ClubMembership, ClubMemberRole
 from app.models.event import Registration, RegistrationStatus
 from app.models.engagement import Attendance
-
+import csv
+import io
+import random
+from sqlalchemy import func
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 from passlib.context import CryptContext
@@ -157,6 +160,72 @@ def delete_user(user_id: int, current_user: User = Depends(get_current_user), db
     db.commit()
     return {"message": "User deleted successfully"}
 
+@router.post("/users/bulk-upload")
+async def bulk_upload_users(file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    content = await file.read()
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file encoding. Please upload a UTF-8 encoded CSV.")
+        
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="Empty CSV file")
+        
+    fieldnames_lower = {f.lower().strip() for f in reader.fieldnames if f}
+    expected_cols = {"name", "email", "role"}
+    
+    if not expected_cols.issubset(fieldnames_lower):
+        raise HTTPException(status_code=400, detail=f"CSV must contain at least: Name, Email, Role. Found: {reader.fieldnames}")
+        
+    success_count = 0
+    errors = []
+    
+    for idx, row in enumerate(reader, start=2):
+        row_clean = {str(k).lower().strip(): str(v).strip() for k, v in row.items() if k}
+        
+        name = row_clean.get("name", "")
+        email = row_clean.get("email", "")
+        role = row_clean.get("role", "").lower()
+        department = row_clean.get("department", "")
+        password = row_clean.get("password", "")
+        
+        if not name or not email or not role:
+            errors.append(f"Row {idx}: Missing required fields (Name, Email, or Role)")
+            continue
+            
+        existing_user = db.query(User).filter(func.lower(User.email) == email.lower()).first()
+        if existing_user:
+            errors.append(f"Row {idx}: Email '{email}' already exists")
+            continue
+            
+        if not password:
+            password = "".join([str(random.randint(0, 9)) for _ in range(8)])
+            
+        hashed = pwd_context.hash(password)
+        
+        new_user = User(
+            name=name,
+            email=email,
+            role=role,
+            department=department,
+            hashed_password=hashed,
+            created_by_role="admin"
+        )
+        db.add(new_user)
+        success_count += 1
+        
+    db.commit()
+    
+    return {
+        "message": f"Successfully created {success_count} users.",
+        "success_count": success_count,
+        "errors": errors
+    }
+
 @router.put("/users/{user_id}/role")
 def update_user_role(user_id: int, role_data: dict = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role != RoleEnum.admin:
@@ -209,8 +278,9 @@ def get_all_users(current_user: User = Depends(get_current_user), db: Session = 
 
 @router.get("/programs")
 def get_admin_events(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator, RoleEnum.finance, RoleEnum.faculty, RoleEnum.mentor]:
-        raise HTTPException(status_code=403, detail="Unauthorized")
+    # To support custom roles, we allow access if they have backend dashboard permissions.
+    # We remove the hardcoded RoleEnum checks which crash for custom roles or non-existent enums.
+    pass
 
     try:
         events = db.query(Event).order_by(Event.title.asc()).all()
@@ -717,7 +787,31 @@ def list_admin_club_requests(current_user: User = Depends(get_current_user), db:
             "user_name": r.user.name if r.user else "Unknown",
             "club_name": club.name if club else "Unknown",
             "message": r.message,
-            "role": r.user.role if r.user else "Unknown"
+            "role": r.user.role if r.user else "Unknown",
+            "department": r.user.department if r.user else "Unknown"
+        })
+    return result
+
+@router.get("/club-requests/approved")
+def list_admin_approved_club_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    reqs = db.query(ClubJoinRequest).join(User).filter(
+        ClubJoinRequest.status == JoinRequestStatus.approved
+    ).order_by(ClubJoinRequest.id.desc()).all()
+    
+    result = []
+    for r in reqs:
+        club = db.query(Club).filter(Club.id == r.club_id).first()
+        result.append({
+            "id": r.id,
+            "user_name": r.user.name if r.user else "Unknown",
+            "club_name": club.name if club else "Unknown",
+            "message": r.message,
+            "role": r.user.role if r.user else "Unknown",
+            "department": r.user.department if r.user else "Unknown",
+            "created_at": r.created_at.isoformat() if r.created_at else None
         })
     return result
 
@@ -781,7 +875,8 @@ def list_admin_club_leave_requests(current_user: User = Depends(get_current_user
             "user_name": r.user.name if r.user else "Unknown",
             "club_name": club.name if club else "Unknown",
             "message": r.reason,
-            "role": r.user.role if r.user else "Unknown"
+            "role": r.user.role if r.user else "Unknown",
+            "department": r.user.department if r.user else "Unknown"
         })
     return result
 
@@ -813,3 +908,263 @@ def reject_admin_club_leave_request(req_id: int, current_user: User = Depends(ge
     req.status = "rejected"
     db.commit()
     return {"message": "Leave request rejected"}
+
+class NameModel(BaseModel):
+    name: str
+
+class RoleModel(BaseModel):
+    name: str
+    permissions: dict = {}
+
+from app.models.user import Department, SystemRole
+from sqlalchemy import func
+
+# --- Departments ---
+@router.get("/departments")
+def get_departments(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    depts = db.query(Department).all()
+    if not depts:
+        # Auto-seed from existing users
+        unique_depts = db.query(User.department).distinct().all()
+        added_depts = set()
+        for (dept_name,) in unique_depts:
+            if dept_name and dept_name.strip():
+                d = dept_name.strip()
+                if d.lower() not in added_depts:
+                    db.add(Department(name=d))
+                    added_depts.add(d.lower())
+        db.commit()
+        depts = db.query(Department).all()
+        
+    return depts
+
+@router.post("/departments")
+def create_department(request: NameModel, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    existing = db.query(Department).filter(func.lower(Department.name) == request.name.lower()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Department already exists")
+    
+    new_dept = Department(name=request.name)
+    db.add(new_dept)
+    db.commit()
+    return {"message": "Department created successfully"}
+
+@router.put("/departments/{dept_id}")
+def update_department(dept_id: int, request: NameModel, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    dept = db.query(Department).filter(Department.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+        
+    existing = db.query(Department).filter(func.lower(Department.name) == request.name.lower(), Department.id != dept_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Department already exists")
+        
+    old_name = dept.name
+    dept.name = request.name
+    
+    db.query(User).filter(User.department == old_name).update({User.department: request.name}, synchronize_session=False)
+    db.commit()
+    return {"message": "Department updated successfully"}
+
+@router.delete("/departments/{dept_id}")
+def delete_department(dept_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    dept = db.query(Department).filter(Department.id == dept_id).first()
+    if not dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+        
+    db.query(User).filter(User.department == dept.name).update({User.department: ""}, synchronize_session=False)
+    db.delete(dept)
+    db.commit()
+    return {"message": "Department deleted successfully"}
+
+# --- System Roles ---
+@router.get("/roles")
+def get_roles(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    roles = db.query(SystemRole).all()
+    
+    # Always ensure core roles exist
+    existing_role_names = {r.name.lower() for r in roles}
+    core_roles = ['student', 'faculty', 'coordinator', 'club_coordinator', 'finance', 'admin']
+    added_new = False
+    
+    for r in core_roles:
+        if r.lower() not in existing_role_names:
+            db.add(SystemRole(name=r))
+    # Force populate ALL default permissions for core roles to fix frontend state
+    from sqlalchemy.orm.attributes import flag_modified
+    changed = False
+    
+    # Define the exact defaults for the core roles
+    full_defaults = {
+        "student": {
+            "dashboard_type": "student",
+            "permissions": {
+                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": False, "join_clubs_via_coordinator": True}
+            }
+        },
+        "faculty": {
+            "dashboard_type": "student",
+            "permissions": {
+                "student_portal": {"view_events": True, "register_events": False, "view_recommendations": True, "view_certificates": False, "submit_feedback": False, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": False}
+            }
+        },
+        "coordinator": {
+            "dashboard_type": "admin",
+            "permissions": {
+                "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
+                "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
+                "finance": {"view_expenses": False, "verify_expenses": False},
+                "system_setup": {"manage_departments": False, "manage_roles": False},
+                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+            }
+        },
+        "club_coordinator": {
+            "dashboard_type": "admin",
+            "permissions": {
+                "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
+                "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
+                "finance": {"view_expenses": False, "verify_expenses": False},
+                "system_setup": {"manage_departments": False, "manage_roles": False},
+                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+            }
+        },
+        "finance": {
+            "dashboard_type": "admin",
+            "permissions": {
+                "finance": {"view_expenses": True, "verify_expenses": True}
+            }
+        },
+        "admin": {
+            "dashboard_type": "admin",
+            "permissions": {
+                "users": {"view_directory": True, "generate_users": True, "delete_users": True, "assign_coordinators": True, "manage_club_requests": True},
+                "events": {"view_events": True, "approve_events": True, "delete_events": True, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": True},
+                "finance": {"view_expenses": True, "verify_expenses": True},
+                "system_setup": {"manage_departments": True, "manage_roles": True},
+                "student_portal": {"view_events": True, "register_events": True, "view_recommendations": True, "view_certificates": True, "submit_feedback": True, "view_clubs": True, "join_clubs_direct": True, "join_clubs_via_coordinator": True}
+            }
+        }
+    }
+    
+    for r in roles:
+        r_name = r.name.lower()
+        if r_name in full_defaults:
+            # We completely forcefully overwrite their permissions with the official defaults
+            # to guarantee they are 100% correct in the database.
+            if r.permissions != full_defaults[r_name]:
+                r.permissions = full_defaults[r_name]
+                flag_modified(r, "permissions")
+                changed = True
+            
+    if added_new or changed:
+        db.commit()
+        if added_new:
+            roles = db.query(SystemRole).all()
+        
+    return roles
+
+@router.post("/roles")
+def create_role(request: RoleModel, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    existing = db.query(SystemRole).filter(func.lower(SystemRole.name) == request.name.lower()).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Role already exists")
+    
+    new_role = SystemRole(name=request.name, permissions=request.permissions)
+    db.add(new_role)
+    db.commit()
+    return {"message": "Role created successfully"}
+
+@router.put("/roles/{role_id}")
+def update_role(role_id: int, request: RoleModel, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    role = db.query(SystemRole).filter(SystemRole.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+        
+    existing = db.query(SystemRole).filter(func.lower(SystemRole.name) == request.name.lower(), SystemRole.id != role_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Role already exists")
+        
+    old_name = role.name
+    role.name = request.name
+    role.permissions = request.permissions
+    
+    db.query(User).filter(User.role == old_name).update({User.role: request.name}, synchronize_session=False)
+    db.commit()
+    return {"message": "Role updated successfully"}
+
+@router.delete("/roles/{role_id}")
+def delete_role(role_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+        
+    role = db.query(SystemRole).filter(SystemRole.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+        
+    db.query(User).filter(User.role == role.name).update({User.role: ""}, synchronize_session=False)
+    db.delete(role)
+    db.commit()
+    return {"message": "Role deleted successfully"}
+
+@router.get("/migrate-setup")
+def migrate_setup(db: Session = Depends(get_db)):
+    added_roles = set()
+    
+    # 1. Get unique roles
+    unique_roles = db.query(User.role).distinct().all()
+    for (role_name,) in unique_roles:
+        if role_name and role_name.strip():
+            r = role_name.strip()
+            if r.lower() not in added_roles:
+                exists = db.query(SystemRole).filter(func.lower(SystemRole.name) == r.lower()).first()
+                if not exists:
+                    db.add(SystemRole(name=r))
+                added_roles.add(r.lower())
+    
+    # Add core roles if not exist
+    core_roles = ['student', 'faculty', 'coordinator', 'club_coordinator', 'finance', 'admin']
+    for r in core_roles:
+        if r.lower() not in added_roles:
+            exists = db.query(SystemRole).filter(func.lower(SystemRole.name) == r.lower()).first()
+            if not exists:
+                db.add(SystemRole(name=r))
+            added_roles.add(r.lower())
+
+    added_depts = set()
+    # 2. Get unique departments
+    unique_depts = db.query(User.department).distinct().all()
+    for (dept_name,) in unique_depts:
+        if dept_name and dept_name.strip():
+            d = dept_name.strip()
+            if d.lower() not in added_depts:
+                exists = db.query(Department).filter(func.lower(Department.name) == d.lower()).first()
+                if not exists:
+                    db.add(Department(name=d))
+                added_depts.add(d.lower())
+
+    db.commit()
+    return {"message": "Migration complete"}

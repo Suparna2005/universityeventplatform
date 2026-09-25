@@ -45,10 +45,14 @@ def read_users_me(current_user: User = Depends(get_current_user), db: Session = 
         "name": current_user.name,
         "role": current_user.role,
         "department": current_user.department,
-        "is_club_admin": False
+        "is_club_admin": False,
+        "permissions": {}
     }
     
-    from app.models.user import ClubMembership
+    from app.models.user import ClubMembership, SystemRole
+    sys_role = db.query(SystemRole).filter(SystemRole.name == current_user.role).first()
+    if sys_role and sys_role.permissions:
+        res["permissions"] = sys_role.permissions
     club_admin = db.query(ClubMembership).filter(
         ClubMembership.user_id == current_user.id,
         ClubMembership.role.in_(['club_coordinator', 'president', 'core', 'head'])

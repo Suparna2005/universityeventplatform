@@ -24,6 +24,8 @@ const ClubsDashboard = () => {
   const { user } = useContext(AuthContext);
   const baseURL = '';
 
+  const canJoinClubs = user && (user.permissions?.permissions?.student_portal?.join_clubs_direct === true || user.permissions?.permissions?.student_portal?.join_clubs_via_coordinator === true);
+
   const [myRequests, setMyRequests] = useState({ join_requests: [], leave_requests: [] });
 
   useEffect(() => {
@@ -274,7 +276,7 @@ const ClubsDashboard = () => {
               <button onClick={() => viewGallery(club)} className="btn-secondary" style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                 View Gallery
               </button>
-              {user && (user.role === 'student' || user.role === 'faculty') && (
+              {user && canJoinClubs && (
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button onClick={() => setSelectedClubForJoin(club.id)} className="btn-primary" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
                     <CheckCircle size={18} /> Join

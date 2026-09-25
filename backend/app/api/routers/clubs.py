@@ -129,11 +129,25 @@ def join_club(club_id: int, req: ClubJoinRequestCreate, current_user: User = Dep
     if existing_req:
         raise HTTPException(status_code=400, detail="Join request already pending")
 
+    # Check permissions dynamically instead of relying on hardcoded logic
+    from app.models.user import SystemRole
+    role_record = db.query(SystemRole).filter(SystemRole.name == current_user.role).first()
+    perms = role_record.permissions if role_record and role_record.permissions else {}
+    student_portal = perms.get("student_portal", {})
+    
+    can_direct = student_portal.get("join_clubs_direct") is True
+    can_via = student_portal.get("join_clubs_via_coordinator") is True
+    
+    if not can_direct and not can_via:
+        raise HTTPException(status_code=403, detail="Not authorized to join clubs")
+        
+    initial_status = JoinRequestStatus.pending_admin if can_direct else JoinRequestStatus.pending
+
     new_req = ClubJoinRequest(
         user_id=current_user.id,
         club_id=club_id,
         message=req.message,
-        status=JoinRequestStatus.pending
+        status=initial_status
     )
     db.add(new_req)
     db.commit()

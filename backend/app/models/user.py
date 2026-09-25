@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table, Enum, DateTime, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, Table, Enum, DateTime, Float, JSON
 from sqlalchemy.orm import relationship
 import enum
 from datetime import datetime
@@ -10,8 +10,20 @@ class RoleEnum(str, enum.Enum):
     club_coordinator = "club_coordinator"
     student = "student"
     finance = "finance"
-    mentor = "mentor"
     faculty = "faculty"
+
+class SystemRole(Base):
+    __tablename__ = "system_roles"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    permissions = Column(JSON, default={}, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Department(Base):
+    __tablename__ = "departments"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class ClubMemberRole(str, enum.Enum):
     member = "member"

@@ -20,13 +20,22 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const baseURL = '';
 
+  const isStudentRole = user.role === 'student' || user.permissions?.dashboard_type === 'student';
+  const perms = user.permissions?.permissions?.student_portal || {};
+  const canViewEvents = perms.view_events === true;
+  const canRegisterEvents = perms.register_events === true;
+  const canViewRecommendations = perms.view_recommendations === true;
+  const canViewCertificates = perms.view_certificates === true;
+  const canSubmitFeedback = perms.submit_feedback === true;
+  const canViewClubs = perms.view_clubs === true;
+
   const fetchData = async () => {
     try {
       const [eventsRes, regRes, recRes, certRes, clubsRes] = await Promise.all([
-        axios.get(`${baseURL}/api/events`),
-        user.role === 'student' ? axios.get(`${baseURL}/api/events/me/registrations`) : Promise.resolve({data: []}),
-        user.role === 'student' ? axios.get(`${baseURL}/api/events/me/recommendations`) : Promise.resolve({data: []}),
-        user.role === 'student' ? axios.get(`${baseURL}/api/certificates/me`) : Promise.resolve({data: []}),
+        canViewEvents ? axios.get(`${baseURL}/api/events`) : Promise.resolve({data: []}),
+        isStudentRole ? axios.get(`${baseURL}/api/events/me/registrations`) : Promise.resolve({data: []}),
+        (isStudentRole && canViewRecommendations) ? axios.get(`${baseURL}/api/events/me/recommendations`) : Promise.resolve({data: []}),
+        (isStudentRole && canViewCertificates) ? axios.get(`${baseURL}/api/certificates/me`) : Promise.resolve({data: []}),
         axios.get(`${baseURL}/api/clubs/list`)
       ]);
       
@@ -161,9 +170,11 @@ const Dashboard = () => {
               Coordinator Portal
             </button>
           )}
-          <button onClick={() => navigate('/clubs')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--secondary)' }}>
-            <Building2 size={20} /> Browse Clubs
-          </button>
+          {canViewClubs && (
+            <button onClick={() => navigate('/clubs')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--secondary)' }}>
+              <Building2 size={20} /> Browse Clubs
+            </button>
+          )}
           <button onClick={() => navigate('/profile')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <UserCircle size={20} /> My Profile
           </button>
@@ -177,7 +188,7 @@ const Dashboard = () => {
       <div className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
         
         {/* Recommendations Section */}
-        {user.role === 'student' && recommendations.length > 0 && (
+        {isStudentRole && canViewRecommendations && recommendations.length > 0 && (
           <div style={{ marginBottom: '4rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
               <h2 style={{ fontSize: '1.6rem', color: '#0f172a', margin: 0 }}>Recommended for you</h2>
@@ -203,11 +214,12 @@ const Dashboard = () => {
           </div>
         )}
 
-        <section style={{ marginBottom: '3rem' }}>
-          <div style={{ marginBottom: '1.25rem' }}>
-            <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Event discovery</p>
-            <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#0f172a', letterSpacing: '-0.03em' }}>Find your next campus event</h2>
-          </div>
+        {canViewEvents && (
+          <section style={{ marginBottom: '3rem' }}>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Event discovery</p>
+              <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#0f172a', letterSpacing: '-0.03em' }}>Find your next campus event</h2>
+            </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
             <label style={{ flex: '1 1 280px', display: 'flex', alignItems: 'center', gap: '0.6rem', border: '1px solid #dbe2ea', borderRadius: '10px', padding: '0 0.85rem', background: 'white' }}>
@@ -257,18 +269,20 @@ const Dashboard = () => {
                       <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><Sparkles size={16} color="#64748b" />{event.club_name}{event.host_department ? ` · ${event.host_department}` : ''}</span>
                       <span style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}><Users size={16} color="#64748b" />{event.registered_count} registered · {event.capacity} seats</span>
                     </div>
-                    {user.role === 'student' ? (
+                    {isStudentRole ? (
                       <div style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
                         {myRegistrations[event.id] ? (
                           <>
                             <span style={{ alignSelf: 'center', color: '#047857', fontSize: '0.82rem', fontWeight: 700 }}>Registered</span>
                             <button onClick={() => handleViewQR(myRegistrations[event.id].reg_id)} className="btn-primary" style={{ flex: 1, padding: '0.65rem' }}>View ticket</button>
-                            {event.state === 'completed' && <button onClick={() => setFeedbackModal({ isOpen: true, eventId: event.id, rating: 5, comment: '' })} className="btn-secondary" style={{ padding: '0.65rem' }}>Feedback</button>}
+                            {event.state === 'completed' && canSubmitFeedback && <button onClick={() => setFeedbackModal({ isOpen: true, eventId: event.id, rating: 5, comment: '' })} className="btn-secondary" style={{ padding: '0.65rem' }}>Feedback</button>}
                           </>
-                        ) : <button onClick={() => handleRegister(event.id)} className="btn-primary" style={{ width: '100%', padding: '0.7rem' }}>Register for event</button>}
+                        ) : (
+                          canRegisterEvents && <button onClick={() => handleRegister(event.id)} className="btn-primary" style={{ width: '100%', padding: '0.7rem' }}>Register for event</button>
+                        )}
                       </div>
                     ) : (
-                      event.state === 'completed' && (
+                      event.state === 'completed' && canSubmitFeedback && (
                         <div style={{ display: 'flex', gap: '0.55rem', marginTop: '1rem' }}>
                           <button onClick={() => setFeedbackModal({ isOpen: true, eventId: event.id, rating: 5, comment: '' })} className="btn-secondary" style={{ padding: '0.65rem', width: '100%' }}>Submit Feedback</button>
                         </div>
@@ -280,11 +294,12 @@ const Dashboard = () => {
             </div>
           )}
         </section>
+        )}
 
       </div>
 
       {/* My Certificates Section */}
-      {user.role === 'student' && Object.keys(myCertificates).length > 0 && (
+      {isStudentRole && canViewCertificates && Object.keys(myCertificates).length > 0 && (
         <div className="animate-fade-in" style={{ animationDelay: '0.4s', marginTop: '4rem' }}>
           <h2 style={{ marginBottom: '1.25rem', fontSize: '1.6rem', color: '#0f172a' }}>My certificates</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '2rem' }}>
