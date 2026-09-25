@@ -28,11 +28,9 @@ const ClubManagement = () => {
 
   useEffect(() => {
     fetchClubs();
-    if (user?.role === 'admin') {
-      axios.get(`${baseURL}/api/admin/users`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      }).then(res => setAllSystemUsers(res.data)).catch(err => console.error("Could not fetch system users for autocomplete", err));
-    }
+    axios.get(`${baseURL}/api/admin/users`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    }).then(res => setAllSystemUsers(res.data)).catch(err => console.error("Could not fetch system users for autocomplete", err));
   }, [user]);
 
   const fetchClubs = async () => {
@@ -117,7 +115,9 @@ const ClubManagement = () => {
     setEditingMember(null);
     setShowRequests(false);
     try {
-      const membersRes = await axios.get(`${baseURL}/api/clubs/${clubId}/members`);
+      const membersRes = await axios.get(`${baseURL}/api/clubs/${clubId}/members`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
       setMembers(membersRes.data);
     } catch (err) {
       console.error("Failed to load members", err);
@@ -258,6 +258,46 @@ const ClubManagement = () => {
   };
 
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showRolePermissionsModal, setShowRolePermissionsModal] = useState(false);
+  const clubPermissionDefaults = {
+    member: { view_members: false, manage_members: false, manage_roles: false, manage_requests: false, manage_gallery: false, manage_points: false, export_members: false, upload_members: false },
+    core: { view_members: true, manage_members: false, manage_roles: false, manage_requests: false, manage_gallery: true, manage_points: false, export_members: false, upload_members: false },
+    head: { view_members: true, manage_members: false, manage_roles: false, manage_requests: true, manage_gallery: true, manage_points: true, export_members: true, upload_members: false },
+    president: { view_members: true, manage_members: true, manage_roles: true, manage_requests: true, manage_gallery: true, manage_points: true, export_members: true, upload_members: true },
+    club_coordinator: { view_members: true, manage_members: false, manage_roles: false, manage_requests: true, manage_gallery: true, manage_points: false, export_members: false, upload_members: false },
+  };
+  const clubPermissionLabels = {
+    view_members: 'View club members', manage_members: 'Add or remove members', manage_roles: 'Change member roles',
+    manage_requests: 'View and process join requests', manage_gallery: 'Manage club gallery', manage_points: 'Award activity points',
+    export_members: 'Export member list', upload_members: 'Bulk import members'
+  };
+  const [clubRolePermissions, setClubRolePermissions] = useState(clubPermissionDefaults);
+  const [selectedPermissionRole, setSelectedPermissionRole] = useState('member');
+  const myClubRole = members.find(member => member.user_id === user?.id)?.role;
+  const myClubPermissions = {
+    ...(clubPermissionDefaults[myClubRole] || {}),
+    ...(clubs.find(club => club.id === selectedClub)?.role_permissions?.[myClubRole] || {})
+  };
+  const isPlatformClubAdmin = ['admin', 'coordinator'].includes(user?.role);
+  const canManageClub = permission => isPlatformClubAdmin || myClubPermissions[permission] === true;
+  const openRolePermissions = (initialRole = 'member') => {
+    const saved = clubs.find(club => club.id === selectedClub)?.role_permissions || {};
+    setClubRolePermissions(Object.fromEntries(Object.entries(clubPermissionDefaults).map(([role, defaults]) => [role, { ...defaults, ...(saved[role] || {}) }])));
+    setSelectedPermissionRole(initialRole);
+    setShowRolePermissionsModal(true);
+  };
+  const saveRolePermissions = async () => {
+    try {
+      const response = await axios.put(`${baseURL}/api/clubs/${selectedClub}/role-permissions`, clubRolePermissions, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setClubs(prev => prev.map(club => club.id === selectedClub ? { ...club, role_permissions: response.data.role_permissions } : club));
+      setShowRolePermissionsModal(false);
+      alert('Club role permissions saved.');
+    } catch (err) {
+      alert(`Could not save role permissions: ${err.response?.data?.detail || err.message}`);
+    }
+  };
   const [manualAddData, setManualAddData] = useState({
     email: '',
     role: 'member',
@@ -265,7 +305,41 @@ const ClubManagement = () => {
     system_role: '',
     department: ''
   });
+  const [selectedUserAccess, setSelectedUserAccess] = useState(null);
+  const [loadingSelectedUserAccess, setLoadingSelectedUserAccess] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const targetUser = allSystemUsers.find(systemUser => systemUser.email === manualAddData.email);
+    if (!targetUser) {
+      setSelectedUserAccess(manualAddData.isNewUser ? {
+        name: manualAddData.name,
+        system_role: manualAddData.system_role || 'student',
+        club_positions: []
+      } : null);
+      setLoadingSelectedUserAccess(false);
+      return () => { active = false; };
+    }
+
+    setLoadingSelectedUserAccess(true);
+    axios.get(`${baseURL}/api/clubs/users/${targetUser.id}/access-summary`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    }).then(response => {
+      if (active) setSelectedUserAccess(response.data);
+    }).catch(() => {
+      if (active) setSelectedUserAccess({
+        name: targetUser.name,
+        system_role: targetUser.role,
+        club_positions: []
+      });
+    }).finally(() => {
+      if (active) setLoadingSelectedUserAccess(false);
+    });
+    return () => { active = false; };
+  }, [allSystemUsers, manualAddData.email, manualAddData.isNewUser, manualAddData.name, manualAddData.system_role, baseURL]);
+
   const [csvFile, setCsvFile] = useState(null);
+
 
   const handleAddMemberManual = async (e) => {
     e.preventDefault();
@@ -409,22 +483,24 @@ const ClubManagement = () => {
                   )}
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                  {joinRequests.length > 0 && (
+                  {joinRequests.length > 0 && canManageClub('manage_requests') && (
                     <span className="badge badge-warning" onClick={() => setShowRequests(!showRequests)} style={{ cursor: 'pointer' }}>
                       {joinRequests.length} Pending Requests
                     </span>
                   )}
                   <span className="badge badge-secondary">{members.length} Total Members</span>
                   {user?.role === 'admin' && (
-                    <button onClick={() => setShowAddMemberModal(true)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
-                      + Add Member
-                    </button>
+                    <>
+                      {canManageClub('manage_members') && <button onClick={() => setShowAddMemberModal(true)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
+                        + Add Member
+                      </button>}
+                    </>
                   )}
 
-                  <label className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer', margin: 0 }}>
+                  {canManageClub('manage_gallery') && <label className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem', cursor: 'pointer', margin: 0 }}>
                     Upload Photo
                     <input type="file" style={{ display: 'none' }} accept="image/*" onChange={handleGalleryUpload} />
-                  </label>
+                  </label>}
                 </div>
               </div>
 
@@ -454,6 +530,38 @@ const ClubManagement = () => {
                 </div>
               )}
 
+              {showRolePermissionsModal && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.68)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
+                  <div className="glass-card" style={{ width: '100%', maxWidth: '720px', maxHeight: '90vh', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0' }}>
+                      <div><h3 style={{ margin: 0, color: 'var(--primary)' }}>Configure Club Role Access</h3><small style={{ color: 'var(--text-muted)' }}>Permissions apply only within this club.</small></div>
+                      <button onClick={() => setShowRolePermissionsModal(false)} style={{ background: 'none', border: 0, cursor: 'pointer' }} aria-label="Close">×</button>
+                    </div>
+                    <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto' }}>
+                      <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem' }}>Club Position</label>
+                      <select className="input-glass" value={selectedPermissionRole} onChange={event => setSelectedPermissionRole(event.target.value)} style={{ width: '100%', marginBottom: '1.25rem' }}>
+                        {Object.keys(clubPermissionDefaults).map(role => <option key={role} value={role}>{role.replace('_', ' ').replace(/\b\w/g, char => char.toUpperCase())}</option>)}
+                      </select>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.25rem 1.5rem' }}>
+                        {Object.entries(clubPermissionLabels).map(([permission, label]) => (
+                          <label key={permission} style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', padding: '0.55rem 0', cursor: 'pointer', color: '#334155' }}>
+                            <input type="checkbox" checked={!!clubRolePermissions[selectedPermissionRole]?.[permission]} onChange={() => setClubRolePermissions(previous => ({
+                              ...previous,
+                              [selectedPermissionRole]: { ...previous[selectedPermissionRole], [permission]: !previous[selectedPermissionRole]?.[permission] }
+                            }))} style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: '#f8fafc' }}>
+                      <button className="btn-secondary" onClick={() => setShowRolePermissionsModal(false)}>Cancel</button>
+                      <button className="btn-primary" onClick={saveRolePermissions}>Save Permissions</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {showAddMemberModal && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                   <div className="glass-card" style={{ padding: '2rem', width: '500px', background: 'white' }}>
@@ -464,99 +572,158 @@ const ClubManagement = () => {
 
                     {/* Manual Add Form */}
                     <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e5e7eb' }}>
-                      <h4 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Option 1: Add by Email</h4>
+                      <h4 style={{ marginBottom: '1rem', fontSize: '1rem' }}>Option 1: Add Member</h4>
                       <form onSubmit={handleAddMemberManual} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div>
-                          <label style={{ fontSize: '0.85rem' }}>Filter by Role (sets role for new users):</label>
-                          <select className="input-glass" value={manualAddData.system_role} onChange={(e) => setManualAddData({...manualAddData, system_role: e.target.value})}>
-                            <option value="">-- All Users --</option>
-                            <option value="student">Student</option>
-                            <option value="faculty">Faculty</option>
-                            <option value="coordinator">Department Coordinator</option>
-                            <option value="club_coordinator">Club Coordinator</option>
-                            <option value="finance">Finance</option>
-                            <option value="admin">Admin</option>
-                          </select>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.85rem' }}>Filter by Department:</label>
+                            <select 
+                              className="input-glass" 
+                              value={manualAddData.department} 
+                              onChange={(e) => {
+                                setManualAddData({...manualAddData, department: e.target.value, email: ''});
+                              }}
+                            >
+                              <option value="">-- All Departments --</option>
+                              {[...new Set(allSystemUsers.map(u => u.department).filter(Boolean))].sort().map(dept => (
+                                <option key={dept} value={dept}>{dept}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.85rem' }}>Filter by System Role:</label>
+                            <select 
+                              className="input-glass" 
+                              value={manualAddData.system_role} 
+                              onChange={(e) => {
+                                setManualAddData({...manualAddData, system_role: e.target.value, email: ''});
+                              }}
+                            >
+                              <option value="">-- All Roles --</option>
+                              <option value="student">Student</option>
+                              <option value="faculty">Faculty</option>
+                              <option value="coordinator">Department Coordinator</option>
+                              <option value="club_coordinator">Club Coordinator</option>
+                              <option value="finance">Finance</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                          </div>
                         </div>
+
                         <div>
-                          <label style={{ fontSize: '0.85rem' }}>User Email (Required):</label>
-                          <input 
-                            list="existing-users-emails"
-                            type="email" 
-                            required 
+                          <label style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>Select User:</label>
+                          <select 
                             className="input-glass" 
-                            placeholder="e.g. student@university.edu" 
-                            value={manualAddData.email} 
+                            required 
+                            value={manualAddData.email === '' ? (manualAddData.isNewUser ? 'new' : '') : manualAddData.email} 
                             onChange={(e) => {
                               const val = e.target.value;
-                              const matchedUser = allSystemUsers.find(u => u.email === val);
-                              if (matchedUser) {
-                                setManualAddData(prev => ({
-                                  ...prev,
-                                  email: val,
-                                  name: matchedUser.name,
-                                  system_role: matchedUser.role,
-                                  department: matchedUser.department || ''
-                                }));
+                              if (val === 'new') {
+                                setManualAddData({...manualAddData, email: '', name: '', isNewUser: true});
                               } else {
-                                setManualAddData(prev => ({...prev, email: val}));
+                                const matchedUser = allSystemUsers.find(u => u.email === val);
+                                if (matchedUser) {
+                                  setManualAddData({
+                                    ...manualAddData,
+                                    email: val,
+                                    name: matchedUser.name,
+                                    system_role: matchedUser.role,
+                                    department: matchedUser.department || '',
+                                    isNewUser: false
+                                  });
+                                } else {
+                                  setManualAddData({...manualAddData, email: val, isNewUser: false});
+                                }
                               }
                             }}
-                            onBlur={async (e) => {
-                              if (!e.target.value) return;
-                              try {
-                                const res = await axios.get(`${baseURL}/api/clubs/lookup-user?email=${e.target.value}`, {
-                                  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-                                });
-                                if (res.data.exists) {
-                                  setManualAddData(prev => ({
-                                    ...prev,
-                                    name: res.data.name,
-                                    system_role: res.data.role,
-                                    department: res.data.department || ''
-                                  }));
-                                }
-                              } catch (err) {}
-                            }}
-                          />
-                          <datalist id="existing-users-emails">
+                          >
+                            <option value="" disabled>-- Select a User --</option>
+                            <option value="new" style={{ fontWeight: 'bold', color: 'var(--primary)' }}>+ Add Brand New User (Type details manually)</option>
                             {allSystemUsers
-                              .filter(u => !manualAddData.system_role || u.role === manualAddData.system_role)
+                              .filter(u => (!manualAddData.department || u.department === manualAddData.department) && (!manualAddData.system_role || u.role === manualAddData.system_role))
+                              .sort((a, b) => a.name.localeCompare(b.name))
                               .map(u => (
-                              <option key={u.id} value={u.email}>{u.name} ({u.role})</option>
-                            ))}
-                          </datalist>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.85rem' }}>Full Name (required for new users):</label>
-                          <input type="text" className="input-glass" placeholder="John Doe" value={manualAddData.name} onChange={(e) => setManualAddData({...manualAddData, name: e.target.value})} />
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.85rem' }}>Department (if new user):</label>
-                          <input 
-                            list="existing-departments-list"
-                            type="text" 
-                            className="input-glass" 
-                            placeholder="Select or type a department..." 
-                            value={manualAddData.department} 
-                            onChange={(e) => setManualAddData({...manualAddData, department: e.target.value})} 
-                          />
-                          <datalist id="existing-departments-list">
-                            {[...new Set(allSystemUsers.map(u => u.department).filter(Boolean))].sort().map(dept => (
-                              <option key={dept} value={dept} />
-                            ))}
-                          </datalist>
-                        </div>
-                        <div>
-                          <label style={{ fontSize: '0.85rem' }}>Club Role:</label>
-                          <select className="input-glass" value={manualAddData.role} onChange={(e) => setManualAddData({...manualAddData, role: e.target.value})}>
-                            <option value="member">Member</option>
-                            <option value="core">Core</option>
-                            <option value="head">Head</option>
-                            <option value="president">President</option>
-                            <option value="club_coordinator">Club Coordinator</option>
+                                <option key={u.id} value={u.email}>{u.name} ({u.email})</option>
+                              ))
+                            }
                           </select>
                         </div>
+
+                        {manualAddData.isNewUser && (
+                          <div style={{ background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                            <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 'bold' }}>Create New User Account</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.85rem' }}>User Email (Required):</label>
+                                <input 
+                                  type="email" 
+                                  required={manualAddData.isNewUser}
+                                  className="input-glass" 
+                                  placeholder="e.g. newuser@university.edu" 
+                                  value={manualAddData.email} 
+                                  onChange={(e) => setManualAddData({...manualAddData, email: e.target.value})} 
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.85rem' }}>Full Name (Required):</label>
+                                <input 
+                                  type="text" 
+                                  required={manualAddData.isNewUser}
+                                  className="input-glass" 
+                                  placeholder="John Doe" 
+                                  value={manualAddData.name} 
+                                  onChange={(e) => setManualAddData({...manualAddData, name: e.target.value})} 
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.85rem' }}>New User Department (Optional):</label>
+                                <input 
+                                  type="text" 
+                                  className="input-glass" 
+                                  placeholder="Type department..." 
+                                  value={manualAddData.department} 
+                                  onChange={(e) => setManualAddData({...manualAddData, department: e.target.value})} 
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.85rem', marginBottom: '0.35rem' }}>Club Role to Assign:</label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '0.6rem', alignItems: 'stretch' }}>
+                            <select className="input-glass" value={manualAddData.role} onChange={(e) => setManualAddData({...manualAddData, role: e.target.value})}>
+                              <option value="member">Member</option>
+                              <option value="core">Core</option>
+                              <option value="head">Head</option>
+                              <option value="president">President</option>
+                              <option value="club_coordinator">Club Coordinator</option>
+                            </select>
+                            {user?.role === 'admin' && (
+                              <button type="button" onClick={() => openRolePermissions(manualAddData.role)} className="btn-secondary" style={{ padding: '0.45rem 0.65rem', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                                Configure Role Access
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: '0.9rem 1rem', border: '1px solid #dbe3ed', borderRadius: '8px', background: '#f8fafc', fontSize: '0.85rem' }}>
+                          <strong style={{ display: 'block', marginBottom: '0.45rem', color: '#1e293b' }}>Selected user's assigned roles</strong>
+                          {loadingSelectedUserAccess ? <span style={{ color: '#64748b' }}>Loading current roles…</span> : selectedUserAccess ? (
+                            <>
+                              <div style={{ color: '#334155', marginBottom: '0.35rem' }}>
+                                System role: <strong style={{ textTransform: 'capitalize' }}>{selectedUserAccess.system_role?.replaceAll('_', ' ')}</strong>
+                              </div>
+                              {selectedUserAccess.club_positions?.length > 0 ? (
+                                <div style={{ color: '#334155', marginBottom: '0.4rem' }}>
+                                  Current club positions: {selectedUserAccess.club_positions.map(position => `${position.club_name} — ${position.role.replaceAll('_', ' ')}`).join(' · ')}
+                                </div>
+                              ) : <div style={{ color: '#64748b', marginBottom: '0.4rem' }}>No other club positions.</div>}
+                            </>
+                          ) : <span style={{ color: '#64748b' }}>Select an existing user to see their current system role and club positions.</span>}
+                        </div>
+
                         <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem' }}>Add Single Member</button>
                       </form>
                     </div>
@@ -569,7 +736,7 @@ const ClubManagement = () => {
                           Download CSV Template
                         </a>
                       </div>
-                      <form onSubmit={handleBulkUploadMembers} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {canManageClub('upload_members') && <form onSubmit={handleBulkUploadMembers} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         <input 
                           type="file" 
                           accept=".csv"
@@ -581,7 +748,7 @@ const ClubManagement = () => {
                         <button type="submit" className="btn-secondary" style={{ marginTop: '0.5rem' }}>
                           Upload & Import Members
                         </button>
-                      </form>
+                      </form>}
                       <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                         * The system will automatically create accounts for new users and email them their login credentials. They will also be added directly to this club.
                       </p>
@@ -689,14 +856,15 @@ const ClubManagement = () => {
                           </td>
                           
                           {/* Points Column */}
-                          <td style={{ padding: '1rem' }}>
-                            <input 
-                              type="number" 
-                              defaultValue={member.activity_points || 0}
-                              onBlur={(e) => savePoints(member.user_id, e.target.value)}
-                              className="input-glass"
-                              style={{ padding: '0.25rem', width: '60px' }}
-                              min="0"
+                      <td style={{ padding: '1rem' }}>
+                        <input 
+                          type="number" 
+                          defaultValue={member.activity_points || 0}
+                          onBlur={(e) => savePoints(member.user_id, e.target.value)}
+                          className="input-glass"
+                          style={{ padding: '0.25rem', width: '60px' }}
+                          min="0"
+                          disabled={!canManageClub('manage_points')}
                             />
                           </td>
 
@@ -713,20 +881,20 @@ const ClubManagement = () => {
                               </div>
                             ) : (
                               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                <button 
+                                {canManageClub('manage_roles') && <button 
                                   onClick={() => startEditing(member)} 
                                   style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}
                                   title="Edit Role"
                                 >
                                   <Edit2 size={18} />
-                                </button>
-                                <button 
+                                </button>}
+                                {canManageClub('manage_members') && <button 
                                   onClick={() => handleRemoveMember(member.user_id)} 
                                   style={{ background: 'none', border: 'none', color: 'red', cursor: 'pointer' }}
                                   title="Remove Member"
                                 >
                                   <Trash2 size={18} />
-                                </button>
+                                </button>}
                               </div>
                             )}
                           </td>

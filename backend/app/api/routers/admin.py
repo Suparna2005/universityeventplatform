@@ -248,7 +248,7 @@ def update_user_role(user_id: int, role_data: dict = Body(...), current_user: Us
 
 @router.get("/users")
 def get_all_users(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
+    if current_user.role not in ['admin', 'coordinator', 'club_coordinator']:
         raise HTTPException(status_code=403, detail="Unauthorized")
     
     from app.models.user import ClubMembership, Club

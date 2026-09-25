@@ -96,6 +96,7 @@ class Club(Base):
     rating = Column(Float, default=0.0)
     achievements = Column(String, nullable=True)
     last_event_date = Column(DateTime, nullable=True)
+    role_permissions = Column(JSON, default=dict, nullable=False)
 
     events = relationship("Event", back_populates="club")
     memberships = relationship("ClubMembership", back_populates="club")

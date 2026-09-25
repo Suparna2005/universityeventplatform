@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 from app.models.user import ClubMemberRole, JoinRequestStatus
 
@@ -18,6 +18,7 @@ class ClubResponse(ClubBase):
     created_at: datetime
     rating: float
     last_event_date: Optional[datetime] = None
+    role_permissions: Optional[Dict[str, Dict[str, bool]]] = None
 
     class Config:
         from_attributes = True

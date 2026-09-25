@@ -93,6 +93,8 @@ async def lifespan(app: FastAPI):
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE clubs ADD COLUMN department TEXT")
                 except sqlite3.OperationalError: pass
+                try: conn.execute("ALTER TABLE clubs ADD COLUMN role_permissions JSON NOT NULL DEFAULT '{}'")
+                except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE students ADD COLUMN year INTEGER")
                 except sqlite3.OperationalError: pass
                 try: conn.execute("ALTER TABLE students ADD COLUMN section TEXT")
@@ -142,6 +144,7 @@ async def lifespan(app: FastAPI):
                     "ALTER TABLE certificates ADD COLUMN is_published INTEGER DEFAULT 0",
                     "ALTER TABLE clubs ADD COLUMN club_type VARCHAR(50) DEFAULT 'university'",
                     "ALTER TABLE clubs ADD COLUMN department TEXT",
+                    "ALTER TABLE clubs ADD COLUMN role_permissions JSON NOT NULL DEFAULT '{}'::json",
                     "ALTER TYPE joinrequeststatus ADD VALUE IF NOT EXISTS 'pending_admin'",
                     "ALTER TYPE leaverequeststatus ADD VALUE IF NOT EXISTS 'pending_admin'",
                     "ALTER TABLE users ALTER COLUMN role TYPE VARCHAR(255) USING role::text;",

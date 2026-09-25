@@ -17,10 +17,80 @@ import io
 
 router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 
+CLUB_PERMISSION_DEFAULTS = {
+    "member": {"view_members": False, "manage_members": False, "manage_roles": False, "manage_requests": False, "manage_gallery": False, "manage_points": False, "export_members": False, "upload_members": False},
+    "core": {"view_members": True, "manage_members": False, "manage_roles": False, "manage_requests": False, "manage_gallery": True, "manage_points": False, "export_members": False, "upload_members": False},
+    "head": {"view_members": True, "manage_members": False, "manage_roles": False, "manage_requests": True, "manage_gallery": True, "manage_points": True, "export_members": True, "upload_members": False},
+    "president": {"view_members": True, "manage_members": True, "manage_roles": True, "manage_requests": True, "manage_gallery": True, "manage_points": True, "export_members": True, "upload_members": True},
+    "club_coordinator": {"view_members": True, "manage_members": False, "manage_roles": False, "manage_requests": True, "manage_gallery": True, "manage_points": False, "export_members": False, "upload_members": False},
+}
+
+def has_club_permission(db: Session, club_id: int, user_id: int, permission: str) -> bool:
+    membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == user_id).first()
+    if not membership:
+        return False
+    role_key = membership.role.value if hasattr(membership.role, "value") else str(membership.role)
+    club = db.query(Club).filter(Club.id == club_id).first()
+    configured = (club.role_permissions or {}).get(role_key, {}) if club else {}
+    return configured.get(permission, CLUB_PERMISSION_DEFAULTS.get(role_key, {}).get(permission, False)) is True
+
+def is_club_manager(user: User, db: Session, club_id: int, permission: str) -> bool:
+    return user.role in [RoleEnum.admin, RoleEnum.coordinator] or has_club_permission(db, club_id, user.id, permission)
+
 @router.get("/list", response_model=List[ClubResponse])
 def list_clubs(db: Session = Depends(get_db)):
     clubs = db.query(Club).order_by(Club.name.asc()).all()
     return clubs
+
+@router.put("/{club_id}/role-permissions")
+def update_club_role_permissions(club_id: int, permissions: dict = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only admins can configure club role permissions")
+    club = db.query(Club).filter(Club.id == club_id).first()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found")
+    allowed_roles = set(CLUB_PERMISSION_DEFAULTS)
+    allowed_permissions = set(next(iter(CLUB_PERMISSION_DEFAULTS.values())).keys())
+    normalized = {}
+    for role, role_perms in permissions.items():
+        if role not in allowed_roles or not isinstance(role_perms, dict):
+            raise HTTPException(status_code=400, detail=f"Invalid club role: {role}")
+        if set(role_perms) - allowed_permissions or any(type(value) is not bool for value in role_perms.values()):
+            raise HTTPException(status_code=400, detail=f"Invalid permissions for role: {role}")
+        normalized[role] = {key: role_perms.get(key, False) for key in allowed_permissions}
+    club.role_permissions = normalized
+    db.commit()
+    return {"role_permissions": normalized}
+
+@router.get("/users/{user_id}/access-summary")
+def get_user_access_summary(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Only admins can view another user's access summary")
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    memberships = db.query(ClubMembership).filter(ClubMembership.user_id == user_id).all()
+    club_positions = []
+    for membership in memberships:
+        club = db.query(Club).filter(Club.id == membership.club_id).first()
+        if not club:
+            continue
+        role_key = membership.role.value if hasattr(membership.role, "value") else str(membership.role)
+        club_positions.append({
+            "club_id": club.id,
+            "club_name": club.name,
+            "role": role_key,
+            "permissions": {
+                **CLUB_PERMISSION_DEFAULTS.get(role_key, {}),
+                **((club.role_permissions or {}).get(role_key, {}))
+            }
+        })
+    return {
+        "user_id": target_user.id,
+        "name": target_user.name,
+        "system_role": target_user.role,
+        "club_positions": club_positions
+    }
 
 from fastapi import BackgroundTasks
 from app.api.routers.coordinator import send_student_credentials_email
@@ -204,14 +274,7 @@ def delete_leave_request(req_id: int, current_user: User = Depends(get_current_u
 
 @router.get("/{club_id}/requests", response_model=List[ClubJoinRequestResponse])
 def list_join_requests(club_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Check permissions (admin/coordinator or club head/president)
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if not is_authorized:
-        membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-        if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president]:
-            is_authorized = True
-
-    if not is_authorized:
+    if not is_club_manager(current_user, db, club_id, "manage_requests"):
         raise HTTPException(status_code=403, detail="Not authorized to view requests for this club")
 
     requests = db.query(ClubJoinRequest).filter(ClubJoinRequest.club_id == club_id, ClubJoinRequest.status == JoinRequestStatus.pending).all()
@@ -237,13 +300,7 @@ def forward_request(request_id: int, current_user: User = Depends(get_current_us
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if not is_authorized:
-        membership = db.query(ClubMembership).filter(ClubMembership.club_id == req.club_id, ClubMembership.user_id == current_user.id).first()
-        if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president]:
-            is_authorized = True
-
-    if not is_authorized:
+    if not is_club_manager(current_user, db, req.club_id, "manage_requests"):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     req.status = JoinRequestStatus.pending_admin
@@ -283,13 +340,7 @@ def reject_request(request_id: int, current_user: User = Depends(get_current_use
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if not is_authorized:
-        membership = db.query(ClubMembership).filter(ClubMembership.club_id == req.club_id, ClubMembership.user_id == current_user.id).first()
-        if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president]:
-            is_authorized = True
-            
-    if not is_authorized:
+    if not is_club_manager(current_user, db, req.club_id, "manage_requests"):
         raise HTTPException(status_code=403, detail="Not authorized to reject requests")
 
     req.status = JoinRequestStatus.rejected
@@ -299,7 +350,21 @@ def reject_request(request_id: int, current_user: User = Depends(get_current_use
 @router.get("/my-memberships")
 def get_my_memberships(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     memberships = db.query(ClubMembership).filter(ClubMembership.user_id == current_user.id).all()
-    return [{"club_id": m.club_id, "role": m.role} for m in memberships]
+    result = []
+    for membership in memberships:
+        club = db.query(Club).filter(Club.id == membership.club_id).first()
+        role_key = membership.role.value if hasattr(membership.role, "value") else str(membership.role)
+        permissions = {
+            **CLUB_PERMISSION_DEFAULTS.get(role_key, {}),
+            **((club.role_permissions or {}).get(role_key, {}) if club else {})
+        }
+        result.append({
+            "club_id": membership.club_id,
+            "club_name": club.name if club else "Unknown club",
+            "role": role_key,
+            "permissions": permissions,
+        })
+    return result
 
 @router.get("/my-requests")
 def get_my_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -322,7 +387,9 @@ def get_my_requests(current_user: User = Depends(get_current_user), db: Session 
     }
 
 @router.get("/{club_id}/members", response_model=List[ClubMembershipResponse])
-def list_members(club_id: int, db: Session = Depends(get_db)):
+def list_members(club_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not is_club_manager(current_user, db, club_id, "view_members"):
+        raise HTTPException(status_code=403, detail="Not authorized to view this club's members")
     memberships = db.query(ClubMembership).filter(ClubMembership.club_id == club_id).order_by(ClubMembership.joined_at.asc()).all()
     result = []
     for mem in memberships:
@@ -344,13 +411,7 @@ def list_members(club_id: int, db: Session = Depends(get_db)):
 
 @router.put("/{club_id}/members/{user_id}/role")
 def update_member_role(club_id: int, user_id: int, role_update: RoleUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if not is_authorized:
-        my_membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-        if my_membership and my_membership.role == ClubMemberRole.president:
-            is_authorized = True
-            
-    if not is_authorized:
+    if not is_club_manager(current_user, db, club_id, "manage_roles"):
         raise HTTPException(status_code=403, detail="Only admins or club president can update roles")
 
     target_membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == user_id).first()
@@ -378,13 +439,7 @@ def update_member_role(club_id: int, user_id: int, role_update: RoleUpdate, curr
 
 @router.delete("/{club_id}/members/{user_id}")
 def remove_member(club_id: int, user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if not is_authorized:
-        my_membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-        if my_membership and my_membership.role == ClubMemberRole.president:
-            is_authorized = True
-            
-    if not is_authorized:
+    if not is_club_manager(current_user, db, club_id, "manage_members"):
         raise HTTPException(status_code=403, detail="Only admins or club president can remove members")
 
     target_membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == user_id).first()
@@ -411,8 +466,11 @@ def lookup_user(email: str, current_user: User = Depends(get_current_user), db: 
 
 @router.post("/{club_id}/members/add")
 def add_member_manually(club_id: int, member_add: ClubMemberAdd, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
-        raise HTTPException(status_code=403, detail="Only Admins can manually add members")
+    if not is_club_manager(current_user, db, club_id, "manage_members"):
+        raise HTTPException(status_code=403, detail="Not authorized to add members")
+    requested_role = member_add.role.value if hasattr(member_add.role, "value") else str(member_add.role)
+    if requested_role != ClubMemberRole.member.value and not is_club_manager(current_user, db, club_id, "manage_roles"):
+        raise HTTPException(status_code=403, detail="Not authorized to assign club roles")
 
     target_user = db.query(User).filter(User.email == member_add.email).first()
     if not target_user:
@@ -488,10 +546,8 @@ def get_club_members_csv_template():
 
 @router.post("/{club_id}/members/csv")
 async def add_members_csv(club_id: int, background_tasks: BackgroundTasks, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
-        my_membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-        if not my_membership or my_membership.role != ClubMemberRole.president:
-            raise HTTPException(status_code=403, detail="Not authorized to bulk add members")
+    if not is_club_manager(current_user, db, club_id, "upload_members"):
+        raise HTTPException(status_code=403, detail="Not authorized to bulk add members")
 
     contents = await file.read()
     try:
@@ -512,6 +568,8 @@ async def add_members_csv(club_id: int, background_tasks: BackgroundTasks, file:
         user_type = row_normalized.get('type', 'student').strip().lower()
         dept = row_normalized.get('department', '').strip()
         club_role_str = row_normalized.get('club role', 'member').strip().lower()
+        if club_role_str not in ['', ClubMemberRole.member.value] and not is_club_manager(current_user, db, club_id, "manage_roles"):
+            raise HTTPException(status_code=403, detail="Not authorized to assign club roles")
         
         if not email or not name:
             continue
@@ -601,11 +659,7 @@ def request_leave_club(club_id: int, reason: str = Body(..., embed=True), curren
 @router.get("/{club_id}/members/export")
 def export_club_members(club_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president]:
-        is_authorized = True
-        
-    if not is_authorized:
+    if not is_club_manager(current_user, db, club_id, "export_members"):
         raise HTTPException(status_code=403, detail="Not authorized to export members.")
         
     members = db.query(ClubMembership).filter(ClubMembership.club_id == club_id).all()
@@ -637,11 +691,7 @@ def update_member_points(club_id: int, user_id: int, points_data: dict, current_
         raise HTTPException(status_code=400, detail="activity_points required.")
         
     membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president]:
-        is_authorized = True
-        
-    if not is_authorized:
+    if not is_club_manager(current_user, db, club_id, "manage_points"):
         raise HTTPException(status_code=403, detail="Not authorized to award points.")
         
     target_membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == user_id).first()
@@ -655,11 +705,7 @@ def update_member_points(club_id: int, user_id: int, points_data: dict, current_
 @router.post("/{club_id}/gallery")
 def upload_club_gallery(club_id: int, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     membership = db.query(ClubMembership).filter(ClubMembership.club_id == club_id, ClubMembership.user_id == current_user.id).first()
-    is_authorized = current_user.role in [RoleEnum.admin, RoleEnum.coordinator]
-    if membership and membership.role in [ClubMemberRole.head, ClubMemberRole.president, ClubMemberRole.core]:
-        is_authorized = True
-        
-    if not is_authorized:
+    if not is_club_manager(current_user, db, club_id, "manage_gallery"):
         raise HTTPException(status_code=403, detail="Not authorized to upload gallery images.")
         
     is_vercel = bool(os.getenv("VERCEL"))
