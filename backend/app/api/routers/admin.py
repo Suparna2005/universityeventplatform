@@ -285,6 +285,14 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
     try:
         events = db.query(Event).order_by(Event.title.asc()).all()
         
+        # Pre-fetch memberships for role calculations
+        from app.models.user import ClubMembership
+        is_admin_or_finance = current_user.role in ['admin', 'finance']
+        my_club_ids = []
+        if not is_admin_or_finance:
+            my_memberships = db.query(ClubMembership).filter(ClubMembership.user_id == current_user.id).all()
+            my_club_ids = [m.club_id for m in my_memberships]
+        
         result = []
         for e in events:
             event_state = e.state.value if hasattr(e.state, 'value') else str(e.state)
@@ -331,7 +339,24 @@ def get_admin_events(current_user: User = Depends(get_current_user), db: Session
             else:
                 club_events_completed = 0
             
+            # Calculate can_manage flag for the frontend
+            can_manage = False
+            if is_admin_or_finance:
+                can_manage = True
+            else:
+                is_dept_match = False
+                if current_user.department:
+                    if e.department == current_user.department:
+                        is_dept_match = True
+                    elif e.club and getattr(e.club, 'department', None) == current_user.department:
+                        is_dept_match = True
+                        
+                is_club_match = e.club_id in my_club_ids
+                is_explicit_match = e.coordinator_id == current_user.id
+                can_manage = is_dept_match or is_club_match or is_explicit_match
+
             result.append({
+                "can_manage": can_manage,
                 "id": e.id,
                 "title": e.title,
                 "description": e.description,
@@ -1027,7 +1052,7 @@ def get_roles(current_user: User = Depends(get_current_user), db: Session = Depe
             "dashboard_type": "admin",
             "permissions": {
                 "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
-                "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True, "manage_events": True},
                 "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
                 "finance": {"view_expenses": False, "verify_expenses": False},
                 "system_setup": {"manage_departments": False, "manage_roles": False},
@@ -1038,7 +1063,7 @@ def get_roles(current_user: User = Depends(get_current_user), db: Session = Depe
             "dashboard_type": "admin",
             "permissions": {
                 "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": False},
-                "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True, "manage_events": True},
                 "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
                 "finance": {"view_expenses": False, "verify_expenses": False},
                 "system_setup": {"manage_departments": False, "manage_roles": False},
@@ -1055,7 +1080,7 @@ def get_roles(current_user: User = Depends(get_current_user), db: Session = Depe
             "dashboard_type": "admin",
             "permissions": {
                 "users": {"view_directory": True, "generate_users": True, "delete_users": True, "assign_coordinators": True, "manage_club_requests": True},
-                "events": {"view_events": True, "approve_events": True, "delete_events": True, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                "events": {"view_events": True, "approve_events": True, "delete_events": True, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True, "manage_events": True},
                 "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": True},
                 "finance": {"view_expenses": True, "verify_expenses": True},
                 "system_setup": {"manage_departments": True, "manage_roles": True},

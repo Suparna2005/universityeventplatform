@@ -173,7 +173,7 @@ async def lifespan(app: FastAPI):
                 "dashboard_type": "admin",
                 "permissions": {
                     "users": {"view_directory": True, "generate_users": True, "delete_users": True, "assign_coordinators": True, "manage_club_requests": True},
-                    "events": {"view_events": True, "approve_events": True, "delete_events": True, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                    "events": {"view_events": True, "approve_events": True, "delete_events": True, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True, "manage_events": True},
                     "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": True},
                     "finance": {"view_expenses": True, "verify_expenses": True},
                     "system_setup": {"manage_departments": True, "manage_roles": True},
@@ -184,7 +184,7 @@ async def lifespan(app: FastAPI):
                 "dashboard_type": "admin",
                 "permissions": {
                     "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
-                    "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                    "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True, "manage_events": True},
                     "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
                     "finance": {"view_expenses": False, "verify_expenses": False},
                     "system_setup": {"manage_departments": False, "manage_roles": False},
@@ -195,7 +195,7 @@ async def lifespan(app: FastAPI):
                 "dashboard_type": "admin",
                 "permissions": {
                     "users": {"view_directory": True, "generate_users": False, "delete_users": False, "assign_coordinators": False, "manage_club_requests": True},
-                    "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True},
+                    "events": {"view_events": True, "approve_events": False, "delete_events": False, "scanner": True, "registration_list": True, "upload_attendance": True, "manage_certificates": True, "manage_events": True},
                     "clubs": {"view_clubs": True, "manage_gallery": True, "delete_clubs": False},
                     "finance": {"view_expenses": False, "verify_expenses": False},
                     "system_setup": {"manage_departments": False, "manage_roles": False},

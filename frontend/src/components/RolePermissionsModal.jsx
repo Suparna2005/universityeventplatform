@@ -136,7 +136,7 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
             {/* Backend Permissions */}
             <div>
               <h4 style={{ margin: '0 0 1rem 0', color: 'var(--primary)', borderBottom: '2px solid var(--glass-border)', paddingBottom: '0.5rem' }}>Backend Management</h4>
-              {renderCheckbox('users', 'view_directory', 'View User Directory')}
+              {renderCheckbox('users', 'view_directory', 'Manage Users (View Directory)')}
               {renderCheckbox('users', 'generate_users', 'Generate / Bulk Upload Users')}
               {renderCheckbox('users', 'delete_users', 'Delete Users')}
               {renderCheckbox('users', 'assign_coordinators', 'Assign Coordinators')}
@@ -168,6 +168,7 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
               {renderCheckbox('events', 'registration_list', 'Registration List')}
               {renderCheckbox('events', 'upload_attendance', 'Upload Attendance CSV')}
               {renderCheckbox('events', 'manage_certificates', 'Generate & Publish Certificates')}
+              {renderCheckbox('events', 'manage_events', 'Manage Programs (Edit & Publish)')}
 
               <h4 style={{ margin: '1.5rem 0 1rem 0', color: 'var(--primary)' }}>Public Portal Access</h4>
               {renderCheckbox('student_portal', 'view_events', 'View Event Discover List')}

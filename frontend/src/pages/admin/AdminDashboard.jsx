@@ -874,9 +874,11 @@ const AdminDashboard = () => {
           </div>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.9rem', color: '#64748b' }}>Welcome, {user.name}</span>
-            <button onClick={() => setIsSystemSetupOpen(true)} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc' }}>
-              <Settings size={18} /> System Setup
-            </button>
+            {(user.role === 'admin' || user.permissions?.permissions?.system_setup?.manage_departments || user.permissions?.permissions?.system_setup?.manage_roles) && (
+              <button onClick={() => setIsSystemSetupOpen(true)} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc' }}>
+                <Settings size={18} /> System Setup
+              </button>
+            )}
             <button onClick={() => navigate('/dashboard')} className="btn-secondary" style={{ padding: '0.4rem 0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               Main Dashboard
             </button>
@@ -1087,7 +1089,7 @@ const AdminDashboard = () => {
                    event.state}
                 </span>
 
-                {user.role === 'admin' && activeSubMenu === 'admin_dash_events' && (
+                {true && (
                   <section style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', marginBottom: '1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
                       <strong style={{ color: '#0f172a' }}>{getEventTimelineStatus(event)}</strong>
@@ -1099,7 +1101,6 @@ const AdminDashboard = () => {
                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#334155', fontSize: '0.9rem' }}>
                       <span><strong>Registered:</strong> {event.registered_count || 0} / {event.capacity || '—'}</span>
                       <span><strong>Checked in:</strong> {event.attended_count || 0}</span>
-                      <span><strong>Budget:</strong> ₹{Number(event.budget || 0).toLocaleString()}</span>
                       <span><strong>Feedback:</strong> {event.feedback_count || 0} ({event.positive_feedback_count || 0} positive)</span>
                     </div>
                     <div style={{ marginTop: '0.75rem', color: '#334155', fontSize: '0.9rem' }}>
@@ -1323,20 +1324,23 @@ const AdminDashboard = () => {
                   )}
 
                   {/* COORDINATOR UI */}
-                  {(user.role === 'coordinator' || canScan() || canUploadCSV()) ? (
+                  {(event.can_manage !== false && (user.role === 'coordinator' || canScan() || canUploadCSV())) ? (
                     <>
-                      {/* Publish is strictly Coordinator only */}
-                      {user.role === 'coordinator' && (
-                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      {/* Manage Events (Edit) & Delete Events */}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                        {(user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events) && (
                           <button onClick={() => handleEditClick(event)} className="btn-secondary" style={{ flex: 1, padding: '0.25rem', fontSize: '0.8rem' }}>
                             ✏️ Edit
                           </button>
+                        )}
+                        {(user.role === 'coordinator' || user.permissions?.permissions?.events?.delete_events) && (
                           <button onClick={() => handleDeleteEvent(event.id)} className="btn-secondary" style={{ flex: 1, background: '#ef4444', padding: '0.25rem', fontSize: '0.8rem' }}>
                             🗑️ Delete
                           </button>
-                        </div>
-                      )}
-                      {user.role === 'coordinator' && event.state === 'pending_coordinator_publish' && (
+                        )}
+                      </div>
+                      
+                      {(user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events) && event.state === 'pending_coordinator_publish' && (
                         <button onClick={() => handlePublishEvent(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#10b981' }}>
                           📢 Publish Event to Students
                         </button>
@@ -1395,11 +1399,7 @@ const AdminDashboard = () => {
                       )}
 
                     </>
-                  ) : (
-                    <button disabled className="btn-secondary" style={{ width: '100%', opacity: 0.7, cursor: 'not-allowed', display: ['admin', 'finance', 'mentor'].includes(user.role) ? 'none' : 'block' }}>
-                      Locked: Requires Coordinator Access
-                    </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             ))
