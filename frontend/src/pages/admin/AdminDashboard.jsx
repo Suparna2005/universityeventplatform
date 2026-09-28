@@ -15,7 +15,7 @@ import ChangePasswordModal from '../ChangePasswordModal';
 import { PromptModal, ConfirmModal, AlertModal } from '../../components/Modals';
 import SystemSetupModal from '../../components/SystemSetupModal';
 import PortalBrand from '../../components/PortalBrand';
-import { EmptyState, LoadingState, StatusBadge } from '../../components/UI';
+import { EmptyState, LoadingState } from '../../components/UI';
 
 const MENU_ICONS = {
   admin_dash_events: BarChart3,
@@ -38,17 +38,6 @@ const MENU_ICONS = {
   coordinator_students: Users,
   account_password: Settings,
   account_signout: LogOut
-};
-
-const getEventTimelineStatus = (event) => {
-  if (event.state === 'completed') return 'Completed';
-  const now = new Date();
-  const start = new Date(event.date);
-  const end = event.end_date ? new Date(event.end_date) : new Date(start);
-  if (!event.end_date) end.setHours(23, 59, 59, 999);
-  if (now >= start && now <= end) return 'Ongoing';
-  if (now < start) return 'Upcoming';
-  return 'Past event';
 };
 
 const AdminDashboard = () => {
@@ -82,10 +71,6 @@ const AdminDashboard = () => {
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   const [pendingReqCounts, setPendingReqCounts] = useState({ faculty: 0, student: 0 });
   const [clubJoinRequests, setClubJoinRequests] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
-  const [filterClub, setFilterClub] = useState('');
-
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const baseURL = '';

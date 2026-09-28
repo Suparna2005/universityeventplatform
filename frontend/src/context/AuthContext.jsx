@@ -47,24 +47,6 @@ export const AuthProvider = ({ children }) => {
     setUser(userRes.data);
   };
 
-  const register = async (name, email, password, studentNumber, department, semester) => {
-    const response = await axios.post(`${baseURL}/api/auth/register`, {
-      name,
-      email,
-      password,
-      student_number: studentNumber,
-      department,
-      semester
-    });
-    const token = response.data.access_token;
-    localStorage.setItem('token', token);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    
-    // Fetch profile
-    const profileResponse = await axios.get(`${baseURL}/api/auth/me`);
-    setUser(profileResponse.data);
-  };
-
   const logout = () => {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
@@ -72,7 +54,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, baseURL }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, baseURL }}>
       {loading ? <div className="app-initial-loading"><LoadingState label="Loading your university portal…" /></div> : children}
     </AuthContext.Provider>
   );

@@ -5,7 +5,7 @@ from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models.user import User, Student, RoleEnum
-from app.schemas.auth import LoginRequest, Token, UserResponse, RegisterRequest, ChangePasswordRequest
+from app.schemas.auth import LoginRequest, Token, UserResponse, ChangePasswordRequest
 from app.core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 from app.api.dependencies import get_current_user
 
@@ -69,33 +69,9 @@ def read_users_me(current_user: User = Depends(get_current_user), db: Session = 
             
     return res
 
-from app.models.user import AccountRequest
-from app.schemas.auth import AccountRequestCreate, ForgotPasswordRequest
+from app.schemas.auth import ForgotPasswordRequest
 from fastapi import BackgroundTasks
 import secrets
-
-@router.post("/request-account")
-def request_account(req: AccountRequestCreate, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == req.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="User with this email already exists")
-    
-    # Check if request already pending
-    existing_req = db.query(AccountRequest).filter(AccountRequest.email == req.email, AccountRequest.status == 'pending').first()
-    if existing_req:
-        raise HTTPException(status_code=400, detail="Account request already pending for this email")
-
-    new_req = AccountRequest(
-        name=req.name,
-        email=req.email,
-        requested_role=req.requested_role,
-        department=req.department,
-        year=req.year,
-        section=req.section
-    )
-    db.add(new_req)
-    db.commit()
-    return {"message": "Account request submitted successfully"}
 
 from app.api.routers.coordinator import send_student_credentials_email
 

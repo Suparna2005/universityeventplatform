@@ -5,14 +5,6 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-class RegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
-    student_number: str
-    department: str
-    semester: int
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -37,11 +29,3 @@ class UserResponse(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: str
-
-class AccountRequestCreate(BaseModel):
-    name: str
-    email: str
-    requested_role: str
-    department: str
-    year: Optional[int] = None
-    section: Optional[str] = None

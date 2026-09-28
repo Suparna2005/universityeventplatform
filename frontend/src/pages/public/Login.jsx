@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { ArrowRight, CalendarDays, ShieldCheck, Sparkles } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
@@ -94,8 +94,7 @@ const Login = () => {
             </button>
           </form>
 
-          <p className="auth-switch">New to Brainware? <Link to="/signup">Create a student account</Link></p>
-          <p className="auth-security-note"><ShieldCheck size={15} /> Your account is protected by university authentication.</p>
+          <p className="auth-security-note"><ShieldCheck size={15} /> Sign in with the university credentials issued by your administrator or coordinator.</p>
         </div>
       </section>
 

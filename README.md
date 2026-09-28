@@ -2,6 +2,8 @@
 
 A responsive and secure university platform for event management, ticketing, certificates, and more.
 
+See [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATION.md) for the project overview, roles, architecture, data model, AI integrations, testing, security, deployment, and development plan.
+
 ## Setup Instructions (Windows PowerShell)
 
 ### Backend Setup
