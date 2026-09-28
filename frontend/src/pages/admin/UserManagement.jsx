@@ -227,7 +227,7 @@ const UserManagement = ({ externalActiveTab }) => {
 
   // Derive sections
   const coordinators = searchedUsers.filter(u => u.role === 'coordinator');
-  const clubCoordinators = searchedUsers.filter(u => u.role === 'club_coordinator');
+  const clubCoordinators = searchedUsers.filter(u => u.role === 'club_coordinator' || (u.clubs && u.clubs.some(c => c.role === 'club_coordinator' || c.role === 'president')));
   const finance = searchedUsers.filter(u => u.role === 'finance');
   const faculty = searchedUsers.filter(u => u.role === 'faculty');
   const students = searchedUsers.filter(u => u.role === 'student');
@@ -331,8 +331,8 @@ const UserManagement = ({ externalActiveTab }) => {
   const activeUsers = getActiveList();
 
   const renderTable = (users) => (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+    <div className="users-table-scroll">
+      <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-muted)' }}>
             <th style={{ padding: '1rem 0.5rem' }}>Name</th>
@@ -515,9 +515,9 @@ const UserManagement = ({ externalActiveTab }) => {
     }
 
     return (
-    <div style={{ overflowX: 'auto' }}>
+    <div className="users-table-scroll">
       {requestsError && <div role="alert" style={{ padding: '1rem', marginBottom: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '6px' }}>Could not load pending requests: {requestsError}</div>}
-      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+      <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left' }}>
         <thead>
           <tr style={{ borderBottom: '2px solid var(--glass-border)', color: 'var(--text-muted)' }}>
             <th style={{ padding: '1rem 0.5rem' }}>Type</th>
@@ -579,12 +579,12 @@ const UserManagement = ({ externalActiveTab }) => {
   };
 
   return (
-    <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
+    <div className="user-management-layout">
       <ConfirmModal {...confirmModal} />
       <AlertModal {...alertModal} onClose={() => setAlertModal({ ...alertModal, isOpen: false })} />
       {/* LEFT: Generation / Edit Form */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', position: 'sticky', top: '100px', height: 'fit-content' }}>
-        <div className="glass-card" style={{ padding: '2rem' }}>
+      <div className="user-generation-column">
+        <div className="glass-card user-management-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
           <UserPlus size={28} color="var(--primary)" />
           <h2 style={{ margin: 0, color: 'var(--primary)' }}>
@@ -790,10 +790,10 @@ const UserManagement = ({ externalActiveTab }) => {
       </div>
 
       {/* RIGHT: List of Users grouped by section */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      <div className="user-directory-column">
         
-        <div className="glass-card" style={{ padding: '2rem', minHeight: '600px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
+        <div className="glass-card user-management-card user-directory-card">
+          <div className="user-directory-header">
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <Users size={28} color="var(--primary)" />
               <h2 style={{ margin: 0, color: 'var(--primary)' }}>User Directory</h2>
@@ -838,7 +838,7 @@ const UserManagement = ({ externalActiveTab }) => {
           </div>
 
           {/* Search & Filter Controls */}
-          <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <div className="user-directory-filters" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
               <Filter size={18} color="var(--text-muted)" />

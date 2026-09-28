@@ -40,7 +40,25 @@ def is_club_manager(user: User, db: Session, club_id: int, permission: str) -> b
 @router.get("/list", response_model=List[ClubResponse])
 def list_clubs(db: Session = Depends(get_db)):
     clubs = db.query(Club).order_by(Club.name.asc()).all()
-    return clubs
+    results = []
+    for club in clubs:
+        memberships = db.query(ClubMembership).filter(ClubMembership.club_id == club.id).all()
+        coordinator = next((membership.user for membership in memberships if membership.role == ClubMemberRole.club_coordinator), None)
+        results.append({
+            "id": club.id,
+            "name": club.name,
+            "description": club.description,
+            "achievements": club.achievements,
+            "club_type": club.club_type,
+            "department": club.department,
+            "created_at": club.created_at,
+            "rating": club.rating or 0,
+            "last_event_date": club.last_event_date,
+            "role_permissions": club.role_permissions,
+            "member_count": len(memberships),
+            "coordinator_name": coordinator.name if coordinator else None,
+        })
+    return results
 
 @router.put("/{club_id}/role-permissions")
 def update_club_role_permissions(club_id: int, permissions: dict = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

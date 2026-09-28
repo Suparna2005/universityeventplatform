@@ -77,7 +77,7 @@ const Profile = () => {
   if (!user) return <div>Loading...</div>;
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
+    <div className="dashboard-theme profile-page" style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
       <button onClick={() => navigate(user.role === 'student' ? '/dashboard' : '/admin')} className="btn-secondary" style={{ marginBottom: '2rem' }}>
         &larr; Back to Dashboard
       </button>

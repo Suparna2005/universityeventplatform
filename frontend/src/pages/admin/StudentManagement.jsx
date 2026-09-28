@@ -160,7 +160,7 @@ const StudentManagement = () => {
   );
 
   return (
-    <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
+    <div className="student-management-layout" style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
       <ConfirmModal {...confirmModal} />
       {/* LEFT: Generation Form */}
       <div className="glass-card" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>

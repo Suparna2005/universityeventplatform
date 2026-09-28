@@ -11,6 +11,7 @@ from app.models.engagement import Attendance
 import csv
 import io
 import random
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from sqlalchemy import func
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -569,14 +570,8 @@ def approve_coordinator_publish(event_id: int, current_user: User = Depends(get_
     db.commit()
     return {"message": "Event published to students!"}
 
-from pydantic import BaseModel
-
-from typing import Optional
-class ExpenseReport(BaseModel):
-    actual_expenses: Optional[int] = 0
-
 @router.put("/events/{event_id}/close")
-def close_event(event_id: int, report: ExpenseReport, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def close_event(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role not in [RoleEnum.admin, RoleEnum.coordinator]:
         raise HTTPException(status_code=403, detail="Only coordinators or admins can close events")
         
@@ -586,8 +581,13 @@ def close_event(event_id: int, report: ExpenseReport, current_user: User = Depen
         
     if event.state not in [EventState.published, EventState.pending_completion]:
         raise HTTPException(status_code=400, detail="Only published/running events can be closed")
-        
-    event.actual_expenses = report.actual_expenses or 0
+
+    if not event.expenses_file_url:
+        raise HTTPException(status_code=400, detail="Upload the required expense CSV before closing this event")
+
+    if event.actual_expenses is None:
+        raise HTTPException(status_code=400, detail="The uploaded expense CSV has no calculated total")
+
     event.state = EventState.finance_review
     db.commit()
     return {"message": "Event closed and expense report submitted to Finance."}
@@ -632,22 +632,56 @@ async def upload_expenses_csv(event_id: int, file: UploadFile = File(...), curre
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-        
+
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload an expense report in CSV format")
+
+    file_contents = await file.read()
+    try:
+        csv_text = file_contents.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(csv_text))
+        reader.fieldnames = [header.strip() if header else "" for header in (reader.fieldnames or [])]
+        headers = set(reader.fieldnames)
+        if not {"Item Description", "Amount"}.issubset(headers):
+            raise HTTPException(status_code=400, detail="CSV must include Item Description and Amount columns. Download the template for the required format.")
+
+        total_expenses = Decimal("0")
+        row_count = 0
+        for row in reader:
+            description = (row.get("Item Description") or "").strip()
+            amount_text = (row.get("Amount") or "").strip().replace(",", "")
+            if not description and not amount_text:
+                continue
+            if not description or not amount_text:
+                raise HTTPException(status_code=400, detail="Every expense row must include an item description and amount")
+            try:
+                amount = Decimal(amount_text)
+            except InvalidOperation:
+                raise HTTPException(status_code=400, detail=f"Invalid amount in expense row {row_count + 2}")
+            if not amount.is_finite() or amount < 0:
+                raise HTTPException(status_code=400, detail=f"Expense amounts must be non-negative numbers (row {row_count + 2})")
+            total_expenses += amount
+            row_count += 1
+
+        if row_count == 0:
+            raise HTTPException(status_code=400, detail="The expense CSV must contain at least one expense row")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="CSV must be encoded as UTF-8")
+
     import os
-    import shutil
     import uuid
     os.makedirs("uploads/expenses", exist_ok=True)
-    ext = file.filename.split(".")[-1]
-    filename = f"{uuid.uuid4()}.{ext}"
+    filename = f"{uuid.uuid4()}.csv"
     filepath = f"uploads/expenses/{filename}"
-    
+
     with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
+        buffer.write(file_contents)
+
     event.expenses_file_url = f"/api/uploads/expenses/{filename}"
+    event.actual_expenses = int(total_expenses.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
     db.commit()
-    
-    return {"message": "Expense CSV uploaded successfully!", "url": event.expenses_file_url}
+
+    return {"message": "Expense CSV uploaded successfully!", "url": event.expenses_file_url, "actual_expenses": event.actual_expenses}
 
 @router.put("/events/{event_id}/approve-completion")
 def approve_completion(event_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

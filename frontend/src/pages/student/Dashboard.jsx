@@ -2,7 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Brain, UserCircle, CalendarDays, MapPin, Users, Search, Building2, Sparkles } from 'lucide-react';
+import { Brain, UserCircle, CalendarDays, MapPin, Users, Search, Building2, Sparkles, Award, LogOut } from 'lucide-react';
+import PortalBrand from '../../components/PortalBrand';
 
 const Dashboard = () => {
   const [events, setEvents] = useState([]);
@@ -149,37 +150,40 @@ const Dashboard = () => {
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem' }}>
+    <div className="student-dashboard-shell dashboard-theme">
+      <aside className="student-dashboard-sidebar">
+        <PortalBrand portal="Student Portal" />
+        <nav className="student-dashboard-nav" aria-label="Student dashboard">
+          <span className="student-nav-label">CAMPUS</span>
+          {canViewEvents && <a href="#student-events"><CalendarDays size={18} /> Discover events</a>}
+          {canViewRecommendations && recommendations.length > 0 && <a href="#student-recommendations"><Sparkles size={18} /> Recommended</a>}
+          {canViewCertificates && Object.keys(myCertificates).length > 0 && <a href="#student-certificates"><Award size={18} /> My certificates</a>}
+          {canViewClubs && <button onClick={() => navigate('/clubs')}><Building2 size={18} /> Clubs directory</button>}
+          <span className="student-nav-label student-account-label">ACCOUNT</span>
+          <button onClick={() => navigate('/profile')}><UserCircle size={18} /> My profile</button>
+          {user.is_club_admin && <button onClick={() => navigate('/admin')}><Building2 size={18} /> Coordinator portal</button>}
+          <button onClick={() => { logout(); navigate('/login'); }}><LogOut size={18} /> Sign out</button>
+        </nav>
+        <div className="student-sidebar-user"><span className="student-avatar">{(user.name || 'U').charAt(0).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div></div>
+      </aside>
+      <main className="student-dashboard-main">
       {/* Header */}
-      <header className="glass-card animate-fade-in" style={{ 
+      <header className="student-dashboard-topbar animate-fade-in" style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
         padding: '1.5rem 2rem', marginBottom: '3rem', borderTop: '4px solid var(--primary)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Brain size={48} color="var(--primary)" />
+              <Brain size={34} color="var(--primary)" />
           <div>
             <h1 style={{ fontSize: '1.5rem', color: 'var(--primary)', fontWeight: 800, margin: 0 }}>
               BRAINWARE <span style={{ color: 'var(--secondary)' }}>UNIVERSITY</span>
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>Welcome back, {user.name} ({user.role})</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem' }}>Your university events and activities</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          {user.is_club_admin && (
-            <button onClick={() => navigate('/admin')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#0f172a' }}>
-              Coordinator Portal
-            </button>
-          )}
-          {canViewClubs && (
-            <button onClick={() => navigate('/clubs')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'var(--secondary)' }}>
-              <Building2 size={20} /> Browse Clubs
-            </button>
-          )}
           <button onClick={() => navigate('/profile')} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <UserCircle size={20} /> My Profile
-          </button>
-          <button onClick={() => { logout(); navigate('/login'); }} className="btn-secondary">
-            Sign Out
           </button>
         </div>
       </header>
@@ -189,7 +193,7 @@ const Dashboard = () => {
         
         {/* Recommendations Section */}
         {isStudentRole && canViewRecommendations && recommendations.length > 0 && (
-          <div style={{ marginBottom: '4rem' }}>
+          <div id="student-recommendations" className="student-content-section" style={{ marginBottom: '2rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
               <h2 style={{ fontSize: '1.6rem', color: '#0f172a', margin: 0 }}>Recommended for you</h2>
               <span className="badge badge-warning" style={{ background: 'var(--primary)', color: 'white' }}>AI Powered</span>
@@ -215,7 +219,7 @@ const Dashboard = () => {
         )}
 
         {canViewEvents && (
-          <section style={{ marginBottom: '3rem' }}>
+          <section id="student-events" className="student-content-section" style={{ marginBottom: '2rem' }}>
             <div style={{ marginBottom: '1.25rem' }}>
               <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Event discovery</p>
               <h2 style={{ margin: 0, fontSize: '1.8rem', color: '#0f172a', letterSpacing: '-0.03em' }}>Find your next campus event</h2>
@@ -300,7 +304,7 @@ const Dashboard = () => {
 
       {/* My Certificates Section */}
       {isStudentRole && canViewCertificates && Object.keys(myCertificates).length > 0 && (
-        <div className="animate-fade-in" style={{ animationDelay: '0.4s', marginTop: '4rem' }}>
+        <div id="student-certificates" className="animate-fade-in student-content-section" style={{ animationDelay: '0.4s', marginTop: '2rem' }}>
           <h2 style={{ marginBottom: '1.25rem', fontSize: '1.6rem', color: '#0f172a' }}>My certificates</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '2rem' }}>
             {Object.values(myCertificates).map(cert => (
@@ -380,6 +384,7 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 };

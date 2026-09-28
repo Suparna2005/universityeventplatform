@@ -19,6 +19,8 @@ class ClubResponse(ClubBase):
     rating: float
     last_event_date: Optional[datetime] = None
     role_permissions: Optional[Dict[str, Dict[str, bool]]] = None
+    member_count: int = 0
+    coordinator_name: Optional[str] = None
 
     class Config:
         from_attributes = True

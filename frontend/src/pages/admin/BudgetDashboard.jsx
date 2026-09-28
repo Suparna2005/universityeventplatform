@@ -7,6 +7,7 @@ const BudgetDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState([]);
   const [proposal, setProposal] = useState({ event_id: '', proposed_amount: '' });
+  const [downloadError, setDownloadError] = useState('');
   
   const { user } = useContext(AuthContext);
   const baseURL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000');
@@ -58,11 +59,48 @@ const BudgetDashboard = () => {
     }
   };
 
+  const downloadBudgetCsv = async (path, filename) => {
+    setDownloadError('');
+    try {
+      const response = await axios.get(`${baseURL}${path}`, {
+        responseType: 'blob',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setDownloadError(err.response?.data?.detail || 'Could not download the budget CSV.');
+    }
+  };
+
   if (loading) return <div>Loading budgets...</div>;
 
   return (
     <div className="animate-fade-in">
-      <h2 style={{ fontSize: '2rem', marginBottom: '2rem' }}>Financial Budgeting</h2>
+      <div className="budget-dashboard-heading">
+        <div>
+          <h2 style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>Financial Budgeting</h2>
+          <p style={{ color: 'var(--text-muted)' }}>Review event budget proposals and expense reports.</p>
+        </div>
+        {['coordinator', 'finance', 'admin'].includes(user.role) && (
+          <div className="budget-csv-actions">
+            <button onClick={() => downloadBudgetCsv('/api/finance/budgets/export', 'event_budgets.csv')} className="btn-primary">
+              Download Budget CSV
+            </button>
+            <button onClick={() => downloadBudgetCsv('/api/finance/budgets/csv/template', 'event_budgets_template.csv')} className="btn-secondary">
+              Download CSV Format
+            </button>
+          </div>
+        )}
+      </div>
+      <p className="budget-csv-format"><strong>CSV format:</strong> Event ID, Event Title, Event Date, Hosting Club, Department, Proposed Budget (INR), Approved Budget (INR), Actual Expenses (INR), Budget Status, Event Status, Submitted By.</p>
+      {downloadError && <p role="alert" style={{ marginBottom: '1rem', color: '#991b1b' }}>{downloadError}</p>}
 
       {/* Coordinator Proposal Form */}
       {['coordinator', 'admin'].includes(user.role) && (

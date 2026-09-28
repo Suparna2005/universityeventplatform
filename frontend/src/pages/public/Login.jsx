@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import { AlertModal } from '../../components/Modals';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -14,6 +15,7 @@ const Login = () => {
   // Modals state
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [reqRole, setReqRole] = useState('student');
@@ -37,11 +39,11 @@ const Login = () => {
     e.preventDefault();
     try {
       await axios.post(`${baseURL}/api/auth/forgot-password`, { email: forgotEmail });
-      alert('If the email exists, a new temporary password has been sent to it.');
       setShowForgotModal(false);
       setForgotEmail('');
+      setAlertModal({ isOpen: true, title: 'Password reset requested', message: 'If the email exists, a new temporary password has been sent to it.', isError: false });
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error resetting password');
+      setAlertModal({ isOpen: true, title: 'Could not reset password', message: err.response?.data?.detail || 'Please try again.', isError: true });
     }
   };
 
@@ -56,6 +58,7 @@ const Login = () => {
       background: 'url("https://upload.wikimedia.org/wikipedia/commons/8/81/Brainware-university.jpg") center/cover no-repeat',
       position: 'relative'
     }}>
+      <AlertModal {...alertModal} onClose={() => setAlertModal(previous => ({ ...previous, isOpen: false }))} />
       {/* Dark overlay for better readability */}
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 45, 98, 0.7)' }}></div>
 

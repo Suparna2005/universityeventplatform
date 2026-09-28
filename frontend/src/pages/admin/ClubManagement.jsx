@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { Users, Edit2, Check, X, Trash2 } from 'lucide-react';
@@ -563,10 +564,11 @@ const ClubManagement = () => {
               )}
 
               {showAddMemberModal && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                  <div className="glass-card" style={{ padding: '2rem', width: '500px', background: 'white' }}>
+                createPortal(
+                <div className="club-modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) setShowAddMemberModal(false); }}>
+                  <div className="club-add-member-modal" role="dialog" aria-modal="true" aria-labelledby="add-club-members-title">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                      <h3 style={{ margin: 0 }}>Add Club Members</h3>
+                      <h3 id="add-club-members-title" style={{ margin: 0 }}>Add Club Members</h3>
                       <button onClick={() => setShowAddMemberModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>✖</button>
                     </div>
 
@@ -754,7 +756,7 @@ const ClubManagement = () => {
                       </p>
                     </div>
                   </div>
-                </div>
+                </div>, document.body)
               )}
 
               {showRequests && joinRequests.length > 0 && (

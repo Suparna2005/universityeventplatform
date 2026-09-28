@@ -2,7 +2,7 @@ import React, { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Brain, UserCircle, QrCode, Settings } from 'lucide-react';
+import { Brain, UserCircle, QrCode, Settings, CalendarDays, Users, CheckCircle2, BarChart3, MessageSquare, Download, Upload, Award, Sparkles, Pencil, Trash2, FileText } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import BudgetDashboard from './BudgetDashboard';
 import AnalyticsDashboard from './AnalyticsDashboard';
@@ -12,8 +12,9 @@ import UserManagement from './UserManagement';
 import AdminClubApprovals from './AdminClubApprovals';
 import StudentManagement from './StudentManagement';
 import ChangePasswordModal from '../ChangePasswordModal';
-import { PromptModal, ConfirmModal } from '../../components/Modals';
+import { PromptModal, ConfirmModal, AlertModal } from '../../components/Modals';
 import SystemSetupModal from '../../components/SystemSetupModal';
+import PortalBrand from '../../components/PortalBrand';
 
 const getEventTimelineStatus = (event) => {
   if (event.state === 'completed') return 'Completed';
@@ -58,6 +59,7 @@ const AdminDashboard = () => {
 
   const [promptModal, setPromptModal] = useState({ isOpen: false, title: '', message: '', defaultValue: '', placeholder: '', onConfirm: null, onCancel: () => setPromptModal({ isOpen: false }) });
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   const [pendingReqCounts, setPendingReqCounts] = useState({ faculty: 0, student: 0 });
 
   const { user, logout } = useContext(AuthContext);
@@ -127,7 +129,7 @@ const AdminDashboard = () => {
       });
       setEventFeedback(response.data);
     } catch (err) {
-      alert(`Error fetching feedback: ${err.response?.data?.detail || err.message}`);
+      setAlertModal({ isOpen: true, title: 'Could not load feedback', message: err.response?.data?.detail || err.message, isError: true });
     } finally {
       setLoadingFeedback(false);
     }
@@ -143,11 +145,11 @@ const AdminDashboard = () => {
     setAiLoading({...aiLoading, [eventId]: true});
     try {
       await axios.post(`${baseURL}/api/admin/events/${eventId}/generate-ai-template`, { prompt });
-      alert("AI successfully generated and applied the new custom background!");
+      setAlertModal({ isOpen: true, title: 'Certificate design generated', message: 'Your AI generated certificate template is ready to preview.', isError: false });
       setAiPrompts({...aiPrompts, [eventId]: ''});
       fetchAdminData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to generate AI template'}`);
+      setAlertModal({ isOpen: true, title: 'Could not generate certificate design', message: err.response?.data?.detail || 'Please try again.', isError: true });
     } finally {
       setAiLoading({...aiLoading, [eventId]: false});
     }
@@ -160,9 +162,9 @@ const AdminDashboard = () => {
   const generateCertificates = async (eventId) => {
     try {
       const response = await axios.post(`${baseURL}/api/certificates/events/${eventId}/generate`);
-      alert(`Success! ${response.data.message}`);
+      setAlertModal({ isOpen: true, title: 'Certificates published', message: response.data.message, isError: false });
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to generate certificates'}`);
+      setAlertModal({ isOpen: true, title: 'Could not publish certificates', message: err.response?.data?.detail || 'Please try again.', isError: true });
     }
   };
 
@@ -186,10 +188,10 @@ const AdminDashboard = () => {
 
       if (editEventId) {
         await axios.put(`${baseURL}/api/events/${editEventId}`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-        alert('Event updated successfully!');
+        setAlertModal({ isOpen: true, title: 'Event updated', message: 'Your event details were saved successfully.', isError: false });
       } else {
         await axios.post(`${baseURL}/api/events`, payload, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-        alert('Event scheduled successfully! Sent to Admin for initial approval.');
+        setAlertModal({ isOpen: true, title: 'Event scheduled', message: 'Your event has been sent to Admin for initial approval.', isError: false });
       }
       
       setShowCreateForm(false);
@@ -220,7 +222,7 @@ const AdminDashboard = () => {
       
       await fetchAdminData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to save event'}`);
+      setAlertModal({ isOpen: true, title: 'Could not save event', message: err.response?.data?.detail || 'Please try again.', isError: true });
     }
   };
 
@@ -312,10 +314,10 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           await axios.delete(`${baseURL}/api/events/${eventId}`);
-          alert("Event deleted successfully!");
+          setAlertModal({ isOpen: true, title: 'Event deleted', message: 'The event was removed successfully.', isError: false });
           fetchAdminData();
         } catch (err) {
-          alert(`Error: ${err.response?.data?.detail || 'Failed to delete event'}`);
+          setAlertModal({ isOpen: true, title: 'Could not delete event', message: err.response?.data?.detail || 'Please try again.', isError: true });
         }
       }
     });
@@ -453,25 +455,25 @@ const AdminDashboard = () => {
     });
   };
 
-  const handleCloseEvent = (eventId) => {
-    setPromptModal({
+  const handleCloseEvent = (event) => {
+    if (!event.expenses_file_url || event.actual_expenses == null) {
+      setAlertModal({ isOpen: true, title: 'Valid expense CSV required', message: 'Upload a valid expense CSV with item descriptions and amounts before submitting this event to Finance.', isError: true });
+      return;
+    }
+    setConfirmModal({
       isOpen: true,
-      title: 'Close Event',
-      message: 'Enter the actual total expenses (in ₹). (Leave blank if you uploaded a CSV)',
-      placeholder: 'e.g. 5000',
-      defaultValue: '',
-      onCancel: () => setPromptModal(prev => ({ ...prev, isOpen: false })),
-      onConfirm: async (expenses) => {
-        setPromptModal(prev => ({ ...prev, isOpen: false }));
-        const parsedExpenses = parseInt(expenses);
-        const finalExpenses = isNaN(parsedExpenses) ? 0 : parsedExpenses;
-
+      title: 'Submit expense report',
+      message: 'The uploaded expense CSV and its calculated total will be sent to Finance. Submit and close this event?',
+      confirmText: 'Submit to Finance',
+      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
-          await axios.put(`${baseURL}/api/admin/events/${eventId}/close`, { actual_expenses: finalExpenses }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-          alert("Event closed successfully! Expense report sent to Finance.");
+          await axios.put(`${baseURL}/api/admin/events/${event.id}/close`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+          setAlertModal({ isOpen: true, title: 'Expense report submitted', message: 'The event and its expense CSV have been sent to Finance for review.', isError: false });
           fetchAdminData();
         } catch (err) {
-          alert(`Error: ${err.response?.data?.detail || 'Failed to close event'}`);
+          setAlertModal({ isOpen: true, title: 'Could not submit expense report', message: err.response?.data?.detail || 'Please try again.', isError: true });
         }
       }
     });
@@ -501,9 +503,9 @@ const AdminDashboard = () => {
   const handlePublishCertificates = async (eventId) => {
     try {
       const response = await axios.put(`${baseURL}/api/certificates/events/${eventId}/publish`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert(response.data.message);
+      setAlertModal({ isOpen: true, title: 'Certificates published', message: response.data.message, isError: false });
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to publish certificates'}`);
+      setAlertModal({ isOpen: true, title: 'Could not publish certificates', message: err.response?.data?.detail || 'Please try again.', isError: true });
     }
   };
 
@@ -530,10 +532,10 @@ const AdminDashboard = () => {
     formData.append("file", file);
     try {
       await axios.post(`${baseURL}/api/admin/events/${eventId}/upload-attendance`, formData);
-      alert("Final Results CSV uploaded successfully!");
+      setAlertModal({ isOpen: true, title: 'Results uploaded', message: 'The final results CSV is ready for certificate processing.', isError: false });
       fetchAdminData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to upload results'}`);
+      setAlertModal({ isOpen: true, title: 'Could not upload results', message: err.response?.data?.detail || 'Please try again.', isError: true });
     }
   };
 
@@ -542,11 +544,11 @@ const AdminDashboard = () => {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      await axios.post(`${baseURL}/api/admin/events/${eventId}/upload-expenses`, formData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert("Expense Report CSV uploaded successfully!");
+      const response = await axios.post(`${baseURL}/api/admin/events/${eventId}/upload-expenses`, formData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      setAlertModal({ isOpen: true, title: 'Expense CSV uploaded', message: `The report is ready to submit to Finance. Calculated total: INR ${Number(response.data.actual_expenses || 0).toLocaleString()}.`, isError: false });
       fetchAdminData();
     } catch (err) {
-      alert(`Error uploading CSV: ${err.response?.data?.detail || err.message}`);
+      setAlertModal({ isOpen: true, title: 'Could not upload expense CSV', message: err.response?.data?.detail || err.message, isError: true });
     }
   };
 
@@ -803,22 +805,127 @@ const AdminDashboard = () => {
   const canUploadCSV = () => user.role === 'coordinator' || user.permissions?.permissions?.events?.upload_attendance;
   const canManageCerts = () => ['admin', 'coordinator'].includes(user.role) || user.permissions?.permissions?.events?.manage_certificates;
   const canViewRegistrationList = () => user.role === 'coordinator' || user.permissions?.permissions?.events?.registration_list;
+  const completedEventsView = ['events_completed', 'admin_events_completed'].includes(activeSubMenu);
+
+  const renderCompletedEventCard = (event) => {
+    const registrations = Number(event.registered_count || 0);
+    const attended = Number(event.attended_count || 0);
+    const absent = Math.max(registrations - attended, 0);
+    const attendanceRate = registrations ? Math.round((attended / registrations) * 100) : 0;
+    const canEditEvent = user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events;
+    const canDeleteEvent = ['admin', 'coordinator', 'mentor'].includes(user.role) || user.permissions?.permissions?.events?.delete_events;
+
+    return (
+      <article className="completed-event-card" key={event.id}>
+        <header className="completed-event-hero">
+          <div className="completed-event-mark"><CalendarDays size={30} /></div>
+          <div className="completed-event-heading">
+            <span className="completed-event-status"><CheckCircle2 size={16} /> Completed</span>
+            <h2>{event.title}</h2>
+            <div className="completed-event-meta">
+              <span><CalendarDays size={16} />{new Date(event.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+              <i />
+              <span><Users size={16} />{event.club_name || 'University event'}</span>
+            </div>
+          </div>
+          <div className="completed-event-actions">
+            {canEditEvent && <button className="completed-edit-button" onClick={() => handleEditClick(event)}><Pencil size={16} /> Edit event</button>}
+            {canDeleteEvent && <button className="completed-delete-button" onClick={() => handleDeleteEvent(event.id)} title="Delete event" aria-label="Delete event"><Trash2 size={18} /></button>}
+          </div>
+        </header>
+
+        <section className="completed-event-metrics" aria-label="Event results summary">
+          <div className="completed-metric metric-purple"><span className="completed-metric-icon"><Users size={23} /></span><div><span>Registrations</span><strong>{registrations}</strong></div></div>
+          <div className="completed-metric metric-green"><span className="completed-metric-icon"><CheckCircle2 size={23} /></span><div><span>Attended</span><strong>{attended}</strong></div></div>
+          <div className="completed-metric metric-orange"><span className="completed-metric-icon"><BarChart3 size={23} /></span><div><span>Attendance rate</span><strong>{attendanceRate}%</strong></div></div>
+          <div className="completed-metric metric-blue"><span className="completed-metric-icon"><MessageSquare size={23} /></span><div><span>Feedback</span><strong>{event.feedback_count || 0}</strong></div></div>
+        </section>
+
+        <div className="completed-event-workspace">
+          <section className="completed-work-panel">
+            <div className="completed-panel-heading">
+              <span className="completed-panel-icon blue-panel-icon"><Users size={22} /></span>
+              <div><h3>Attendance &amp; results</h3><p>Review attendee details and manage result reports.</p></div>
+            </div>
+            <div className="completed-attendance-summary">
+              <div><strong>{registrations}</strong><span>Registered</span></div>
+              <div><strong className="green-number">{attended}</strong><span>Attended</span></div>
+              <div><strong className="red-number">{absent}</strong><span>Absent</span></div>
+              <div><strong>{attendanceRate}%</strong><span>Attendance rate</span></div>
+            </div>
+            {canViewRegistrationList() && (
+              <button onClick={() => handleExportRegistrations(event.id)} className="completed-download-button"><Download size={18} /> Download attendance CSV</button>
+            )}
+            {event.attendance_file_url && (
+              <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="completed-file-link"><FileText size={17} /> Review uploaded results</a>
+            )}
+            {canUploadCSV() && (
+              <div className="completed-upload-area">
+                <div className="completed-upload-heading"><strong><FileText size={17} /> Upload final results (CSV for certificates)</strong><a href={`${baseURL}/api/admin/events/csv/template/attendance`} target="_blank" rel="noreferrer">Download template</a></div>
+                <label className="completed-file-picker"><Upload size={19} /><span>Choose a CSV file</span><input type="file" accept=".csv" onChange={e => handleUploadAttendance(event.id, e.target.files[0])} /></label>
+                <small>Include student details and certificate eligibility in the CSV.</small>
+              </div>
+            )}
+            {event.feedback_count > 0 && <button onClick={() => handleViewFeedback(event.id)} className="completed-feedback-button"><MessageSquare size={17} /> View feedback analysis</button>}
+          </section>
+
+          <section className="completed-work-panel">
+            <div className="completed-panel-heading">
+              <span className="completed-panel-icon blue-panel-icon"><Award size={22} /></span>
+              <div><h3>Certificates</h3><p>Choose a design, preview it, and publish certificates to eligible students.</p></div>
+            </div>
+            {canManageCerts() ? (
+              <div className="completed-certificate-flow">
+                <div className="completed-certificate-steps">
+                  <div className="completed-certificate-step"><span>1</span><div><strong>Choose a template</strong><small>Upload your design or create one with AI.</small></div></div>
+                  <div className="completed-template-options">
+                    <label className="completed-template-option"><Upload size={20} /><strong>Upload design</strong><small>PNG or JPG recommended</small><input type="file" accept=".png,.jpg,.jpeg" onChange={async e => {
+                      const file = e.target.files[0];
+                      if (!file) return;
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      try {
+                        await axios.post(`${baseURL}/api/admin/events/${event.id}/upload-certificate-template`, formData);
+                        setAlertModal({ isOpen: true, title: 'Certificate design uploaded', message: 'Your custom certificate template is ready to preview.', isError: false });
+                        fetchAdminData();
+                      } catch (err) {
+                        setAlertModal({ isOpen: true, title: 'Could not upload certificate design', message: err.response?.data?.detail || 'Please try again.', isError: true });
+                      }
+                    }} /></label>
+                    <div className="completed-template-option ai-template-option"><Sparkles size={20} /><strong>Generate with AI</strong><small>Create a design from your description.</small><div className="completed-ai-controls"><input type="text" value={aiPrompts[event.id] || ''} onChange={e => setAiPrompts({ ...aiPrompts, [event.id]: e.target.value })} placeholder="Describe colors or style" disabled={aiLoading[event.id]} /><button onClick={() => handleGenerateAITemplate(event.id)} disabled={aiLoading[event.id] || !aiPrompts[event.id]?.trim()}>{aiLoading[event.id] ? 'Generating…' : 'Generate'}</button></div></div>
+                  </div>
+                  <div className="completed-certificate-step"><span>2</span><div><strong>Preview certificate</strong><small>Review the design before publishing.</small></div></div>
+                  {event.certificate_template_url ? <img className="completed-certificate-preview" src={`${baseURL}${event.certificate_template_url}`} alt={`${event.title} certificate preview`} /> : <div className="completed-certificate-placeholder"><Award size={30} /><span>Your certificate preview will appear here.</span></div>}
+                  <div className="completed-certificate-step"><span>3</span><div><strong>Publish certificates</strong><small>{attended} attendees recorded for this event.</small></div></div>
+                </div>
+                <div className="completed-eligible-count"><Users size={18} /><strong>{attended}</strong> attendees recorded</div>
+                <button onClick={() => generateCertificates(event.id)} className="completed-publish-certificates"><Sparkles size={18} /> Publish certificates</button>
+              </div>
+            ) : (
+              <div className="completed-certificate-placeholder"><Award size={30} /><span>Certificate publishing is managed by the event coordinator.</span></div>
+            )}
+          </section>
+        </div>
+
+        <details className="completed-event-details">
+          <summary>Event details</summary>
+          <div><p><strong>Location:</strong> {event.location || 'Not specified'}</p><p><strong>About:</strong> {event.description || 'No description provided.'}</p><p><strong>Club:</strong> {event.club_name || 'University event'}</p>{user.role === 'finance' && <p><strong>Actual expenses:</strong> INR {Number(event.actual_expenses || 0).toLocaleString()} {event.expenses_file_url && <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer">View expense report</a>}</p>}</div>
+        </details>
+      </article>
+    );
+  };
 
   return (
-    <div className="corporate-theme" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-gradient)' }}>
+    <div className="corporate-theme app-dashboard-layout" style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-gradient)' }}>
+      <AlertModal {...alertModal} onClose={() => setAlertModal(previous => ({ ...previous, isOpen: false }))} />
       {showChangePassword && (
         <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
       )}
       
       {/* Sidebar Navigation */}
-      <aside style={{ width: '280px', background: 'var(--glass-bg)', borderRight: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-          <h2 style={{ fontSize: '1.25rem', color: 'var(--primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800 }}>
-            <Brain size={28} /> BRAINWARE
-          </h2>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '2.25rem', textTransform: 'uppercase', fontWeight: 'bold' }}>
-            {user.role} Portal
-          </span>
+      <aside className="app-dashboard-sidebar" style={{ width: '280px', background: 'var(--glass-bg)', borderRight: '1px solid var(--glass-border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'sticky', top: 0 }}>
+        <div className="app-sidebar-brand-wrap">
+          <PortalBrand portal={`${user.role.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase())} Portal`} />
         </div>
         
         <nav style={{ padding: '1rem', flex: 1, overflowY: 'auto' }}>
@@ -860,13 +967,13 @@ const AdminDashboard = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
+      <main className="app-dashboard-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflowY: 'auto' }}>
         <PromptModal {...promptModal} />
         <ConfirmModal {...confirmModal} />
         <SystemSetupModal isOpen={isSystemSetupOpen} onClose={() => setIsSystemSetupOpen(false)} />
         
         {/* Top Header */}
-        <header style={{ background: 'white', padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
+        <header className="app-dashboard-topbar" style={{ background: 'white', padding: '1rem 2rem', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 10 }}>
           <div>
             <h1 style={{ fontSize: '1.25rem', margin: 0, color: '#0f172a' }}>
               {menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label || 'Dashboard'}
@@ -889,7 +996,7 @@ const AdminDashboard = () => {
         </header>
 
         {/* Dynamic Content Wrapper */}
-        <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+        <div className="app-dashboard-content" style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto', width: '100%' }}>
           
           {/* We hide the legacy tabs, but keep them rendering if needed or just use activeTab */}
           
@@ -1048,12 +1155,12 @@ const AdminDashboard = () => {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem' }}>Loading operations...</div>
         ) : eventGridSubMenus.includes(activeSubMenu) && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '2rem' }}>
+          <div className={`admin-event-list-grid${completedEventsView ? ' completed-events-grid' : ''}`} style={{ display: 'grid', gridTemplateColumns: completedEventsView ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(400px, 1fr))', gap: completedEventsView ? '1.25rem' : '2rem' }}>
             {getFilteredEvents().length === 0 ? (
               <p style={{ color: '#64748b' }}>No events found for this filter.</p>
             ) : (
-              getFilteredEvents().map(event => (
-                <div key={event.id} className="glass-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+              getFilteredEvents().map(event => completedEventsView && event.state === 'completed' ? renderCompletedEventCard(event) : (
+                <div key={event.id} className="glass-card admin-event-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
                 
                 {['admin', 'coordinator', 'mentor'].includes(user.role) && (
                   <button 
@@ -1347,10 +1454,10 @@ const AdminDashboard = () => {
                       )}
 
                       {/* Upload Expense CSV (Coordinator) */}
-                      {['published', 'finance_review', 'completed'].includes(event.state) && (
+                      {event.state === 'published' && (
                         <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>📤 Upload Expense CSV for Finance (Optional):</label>
+                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Upload Expense CSV for Finance (Required):</label>
                             <a href={`${baseURL}/api/admin/events/csv/template/expenses`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}>Download Template</a>
                           </div>
                           <input 
@@ -1360,12 +1467,19 @@ const AdminDashboard = () => {
                             className="input-glass"
                             style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
                           />
+                          {event.expenses_file_url && <small style={{ display: 'block', marginTop: '0.35rem', color: '#047857' }}>Expense CSV uploaded - Total (INR): {Number(event.actual_expenses || 0).toLocaleString()}</small>}
                         </div>
                       )}
 
+                      {event.state === 'finance_review' && event.expenses_file_url && (
+                        <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: '0.5rem', color: '#047857', fontSize: '0.85rem' }}>
+                          View submitted expense CSV - Total (INR): {Number(event.actual_expenses || 0).toLocaleString()}
+                        </a>
+                      )}
+
                       {event.state === 'published' && (
-                        <button onClick={() => handleCloseEvent(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#dc2626', borderColor: '#dc2626' }}>
-                          🛑 Submit Expenses & Close (Send to Finance)
+                        <button onClick={() => handleCloseEvent(event)} disabled={!event.expenses_file_url || event.actual_expenses == null} title={!event.expenses_file_url || event.actual_expenses == null ? 'Upload a valid expense CSV first' : undefined} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: event.expenses_file_url && event.actual_expenses != null ? '#dc2626' : '#64748b', borderColor: event.expenses_file_url && event.actual_expenses != null ? '#dc2626' : '#cbd5e1', opacity: event.expenses_file_url && event.actual_expenses != null ? 1 : 0.6, cursor: event.expenses_file_url && event.actual_expenses != null ? 'pointer' : 'not-allowed' }}>
+                          {event.expenses_file_url && event.actual_expenses != null ? 'Submit CSV & Close (Send to Finance)' : 'Upload Expense CSV to Continue'}
                         </button>
                       )}
 

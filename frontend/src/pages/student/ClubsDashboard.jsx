@@ -189,7 +189,7 @@ const ClubsDashboard = () => {
   if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>Loading Clubs Directory...</div>;
 
   return (
-    <div className="animate-fade-in" style={{ padding: '2rem' }}>
+    <div className="dashboard-theme clubs-page animate-fade-in">
       
       {(myRequests.join_requests.length > 0 || myRequests.leave_requests.length > 0) && (
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', border: '2px solid var(--primary)' }}>
@@ -225,70 +225,66 @@ const ClubsDashboard = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-        <Users size={32} color="var(--primary)" />
-        <h2 style={{ fontSize: '2rem', margin: 0 }}>University Clubs Directory</h2>
-      </div>
+      <header className="clubs-heading">
+        <div className="clubs-heading-icon"><Users size={24} /></div>
+        <div>
+          <p className="clubs-eyebrow">Student life · Communities</p>
+          <h2>University Clubs</h2>
+          <p>Explore campus communities, meet their coordinators, and find your place.</p>
+        </div>
+        <span className="clubs-total">{clubs.length} {clubs.length === 1 ? 'club' : 'clubs'}</span>
+      </header>
 
       <AlertModal {...alertModal} onClose={() => setAlertModal({ ...alertModal, isOpen: false })} />
       <PromptModal {...promptModal} />
       <ConfirmModal {...confirmModal} />
 
-      <p style={{ color: 'var(--text-muted)', marginBottom: '3rem', fontSize: '1.1rem', maxWidth: '800px' }}>
-        Discover and join various communities! Faculties, Mentors, and Students from any department are welcome to join and contribute. Find a club that matches your passion below.
-      </p>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '2rem' }}>
+      <div className="clubs-grid">
         {clubs.map(club => (
-          <div key={club.id} className="glass-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column' }}>
-            
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-              <h3 style={{ fontSize: '1.4rem', margin: 0, color: 'var(--text-main)', fontWeight: 'bold' }}>{club.name}</h3>
-              <span className="badge badge-warning" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                <Star size={14} fill="currentColor" /> {club.rating ? club.rating.toFixed(1) : 'New'}
-              </span>
+          <article key={club.id} className="club-card">
+            <div className="club-card-heading">
+              <div>
+                <span className="club-type">{club.club_type === 'departmental' ? (club.department || 'Departmental') : 'University club'}</span>
+                <h3>{club.name}</h3>
+              </div>
+              <span className="club-rating"><Star size={14} fill="currentColor" /> {club.rating ? club.rating.toFixed(1) : 'New'}</span>
             </div>
 
-            <p style={{ color: 'var(--text-muted)', flex: 1, marginBottom: '1.5rem', lineHeight: '1.6' }}>
-              {club.description || "No description provided."}
-            </p>
+            <p className="club-description">{club.description || 'No description has been provided yet.'}</p>
 
-            <div style={{ background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <Trophy size={18} color="var(--secondary)" style={{ marginTop: '0.1rem' }} />
-                <div>
-                  <strong style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Achievements</strong>
-                  <span style={{ fontSize: '0.95rem' }}>{club.achievements || "Rising stars in the making!"}</span>
-                </div>
+            <div className="club-facts">
+              <div className="club-fact">
+                <Users size={18} />
+                <div><span>Club members</span><strong>{club.member_count ?? 0}</strong></div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                <Calendar size={18} color="var(--primary)" style={{ marginTop: '0.1rem' }} />
-                <div>
-                  <strong style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Last Active Event</strong>
-                  <span style={{ fontSize: '0.95rem' }}>
-                    {club.last_event_date ? new Date(club.last_event_date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : "No events hosted yet"}
-                  </span>
-                </div>
+              <div className="club-fact">
+                <CheckCircle size={18} />
+                <div><span>Coordinator</span><strong>{club.coordinator_name || 'Not assigned'}</strong></div>
+              </div>
+              <div className="club-fact">
+                <Trophy size={18} />
+                <div><span>Achievements</span><strong>{club.achievements || 'No achievements listed'}</strong></div>
+              </div>
+              <div className="club-fact">
+                <Calendar size={18} />
+                <div><span>Last active event</span><strong>{club.last_event_date ? new Date(club.last_event_date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'No events hosted yet'}</strong></div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <button onClick={() => viewGallery(club)} className="btn-secondary" style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                View Gallery
+            <div className="club-actions">
+              <button onClick={() => viewGallery(club)} className="btn-secondary club-gallery-button">
+                View gallery
               </button>
               {user && canJoinClubs && (
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={() => setSelectedClubForJoin(club.id)} className="btn-primary" style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                    <CheckCircle size={18} /> Join
-                  </button>
-                  <button onClick={() => handleLeaveClub(club.id)} style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: '8px', padding: '0.75rem', cursor: 'pointer', fontWeight: 'bold' }}>
-                    Leave
-                  </button>
+                <div className="club-membership-actions">
+                  <button onClick={() => setSelectedClubForJoin(club.id)} className="btn-primary"><CheckCircle size={17} /> Join club</button>
+                  <button onClick={() => handleLeaveClub(club.id)} className="club-leave-button">Leave</button>
                 </div>
               )}
             </div>
-          </div>
+          </article>
         ))}
+        {clubs.length === 0 && <div className="clubs-empty">No clubs are listed yet.</div>}
       </div>
 
       {/* Gallery Modal */}
