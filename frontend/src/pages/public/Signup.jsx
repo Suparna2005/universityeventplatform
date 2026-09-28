@@ -1,174 +1,73 @@
-import React, { useState, useContext } from 'react';
+import React, { useContext, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, BookOpenCheck } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
-import { useNavigate, Link } from 'react-router-dom';
+import PortalBrand from '../../components/PortalBrand';
 
 const Signup = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    studentNumber: '',
-    department: '',
-    semester: 1
-  });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', studentNumber: '', department: '', semester: 1 });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+  const handleChange = (event) => setFormData((previous) => ({ ...previous, [event.target.name]: event.target.value }));
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await register(
-        formData.name,
-        formData.email,
-        formData.password,
-        formData.studentNumber,
-        formData.department,
-        parseInt(formData.semester)
-      );
+      await register(formData.name, formData.email, formData.password, formData.studentNumber, formData.department, parseInt(formData.semester, 10));
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      setError(err.response?.data?.detail || 'Registration failed. Check your details and try again.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'url("https://upload.wikimedia.org/wikipedia/commons/8/81/Brainware-university.jpg") center/cover no-repeat',
-      position: 'relative'
-    }}>
-      {/* Dark overlay for better readability */}
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 45, 98, 0.7)' }}></div>
-
-      <div className="glass-card animate-fade-in" style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: '550px',
-        padding: '3rem',
-        background: 'rgba(255, 255, 255, 0.85)',
-        zIndex: 10,
-        margin: '2rem 0'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '2rem', color: 'var(--primary)', fontWeight: 800 }}>
-            BRAINWARE
-          </h2>
-          <h3 style={{ fontSize: '1.2rem', color: 'var(--secondary)', letterSpacing: '2px', textTransform: 'uppercase' }}>
-            STUDENT REGISTRATION
-          </h3>
+    <main className="auth-shell auth-shell-signup">
+      <section className="auth-story-panel">
+        <div className="auth-story-inner">
+          <PortalBrand portal="University Portal" />
+          <div className="auth-story-copy">
+            <span className="auth-kicker"><BookOpenCheck size={15} /> YOUR CAMPUS STARTS HERE</span>
+            <h1>Find your people. Join in.</h1>
+            <p>Create your student account to register for events, join clubs, and keep track of your university activities.</p>
+          </div>
+          <small className="auth-story-footer">Brainware University · Event Management Portal</small>
         </div>
+        <div className="auth-decoration auth-decoration-one" />
+        <div className="auth-decoration auth-decoration-two" />
+      </section>
 
-        {error && (
-          <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-            {error}
-          </div>
-        )}
+      <section className="auth-form-panel auth-signup-panel">
+        <div className="auth-form-card auth-signup-card">
+          <div className="auth-mobile-brand"><PortalBrand portal="University Portal" /></div>
+          <span className="ui-eyebrow">STUDENT REGISTRATION</span>
+          <h2>Create your account</h2>
+          <p className="auth-intro">Use your university details to get started.</p>
+          {error && <div className="auth-error" role="alert">{error}</div>}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>Full Name</label>
-              <input 
-                type="text" 
-                name="name"
-                className="input-glass"
-                placeholder="John Doe"
-                value={formData.name} 
-                onChange={handleChange}
-                required
-              />
+          <form onSubmit={handleSubmit} className="auth-form auth-signup-form">
+            <div className="auth-fields-two">
+              <div className="ui-form-field"><label htmlFor="signup-name">Full name</label><input id="signup-name" type="text" name="name" className="input-glass" autoComplete="name" placeholder="Your full name" value={formData.name} onChange={handleChange} required /></div>
+              <div className="ui-form-field"><label htmlFor="signup-student-number">Student ID number</label><input id="signup-student-number" type="text" name="studentNumber" className="input-glass" placeholder="BWU/BTA/22/001" value={formData.studentNumber} onChange={handleChange} required /></div>
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>Student ID Number</label>
-              <input 
-                type="text" 
-                name="studentNumber"
-                className="input-glass"
-                placeholder="BWU/BTA/22/001"
-                value={formData.studentNumber} 
-                onChange={handleChange}
-                required
-              />
+            <div className="ui-form-field"><label htmlFor="signup-email">University email</label><input id="signup-email" type="email" name="email" className="input-glass" autoComplete="email" placeholder="name@brainwareuniversity.ac.in" value={formData.email} onChange={handleChange} required /></div>
+            <div className="ui-form-field"><label htmlFor="signup-password">Password</label><input id="signup-password" type="password" name="password" className="input-glass" autoComplete="new-password" placeholder="At least 6 characters" value={formData.password} onChange={handleChange} required minLength={6} /></div>
+            <div className="auth-fields-department">
+              <div className="ui-form-field"><label htmlFor="signup-department">Department</label><select id="signup-department" name="department" className="input-glass" value={formData.department} onChange={handleChange} required><option value="">Select department</option><option value="Computer Science">Computer Science</option><option value="Engineering">Engineering</option><option value="Business">Business</option><option value="Arts">Arts</option><option value="Science">Science</option></select></div>
+              <div className="ui-form-field"><label htmlFor="signup-semester">Semester</label><input id="signup-semester" type="number" name="semester" className="input-glass" min="1" max="10" value={formData.semester} onChange={handleChange} required /></div>
             </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>University Email</label>
-            <input 
-              type="email" 
-              name="email"
-              className="input-glass"
-              placeholder="student@test.edu"
-              value={formData.email} 
-              onChange={handleChange}
-              required
-            />
-          </div>
-          
-          <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>Password</label>
-            <input 
-              type="password" 
-              name="password"
-              className="input-glass"
-              placeholder="••••••••"
-              value={formData.password} 
-              onChange={handleChange}
-              required
-              minLength={6}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 2 }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>Department</label>
-              <select name="department" className="input-glass" value={formData.department} onChange={handleChange} required>
-                <option value="">Select Department</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Business">Business</option>
-                <option value="Arts">Arts</option>
-                <option value="Science">Science</option>
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>Semester</label>
-              <input 
-                type="number" 
-                name="semester"
-                className="input-glass"
-                min="1" max="10"
-                value={formData.semester} 
-                onChange={handleChange}
-                required
-              />
-            </div>
-          </div>
-
-          <button type="submit" className="btn-primary" style={{ marginTop: '1rem', padding: '12px' }} disabled={loading}>
-            {loading ? 'Registering...' : 'Create Student Account'}
-          </button>
-        </form>
-
-        <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-          <p>Already have an account? <Link to="/login" style={{ color: 'var(--primary)', fontWeight: 'bold', textDecoration: 'none' }}>Log In Here</Link></p>
+            <button type="submit" className="btn-primary auth-submit" disabled={loading}>{loading ? 'Creating account…' : 'Create student account'} {!loading && <ArrowRight size={17} />}</button>
+          </form>
+          <p className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></p>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };
 

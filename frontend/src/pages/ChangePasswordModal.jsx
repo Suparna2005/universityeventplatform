@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import { DialogFrame } from '../components/UI';
 
 const ChangePasswordModal = ({ onClose }) => {
   const [currentPassword, setCurrentPassword] = useState('');
@@ -7,60 +8,48 @@ const ChangePasswordModal = ({ onClose }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
     setSuccess('');
-
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match.");
+      setError('New passwords do not match.');
       return;
     }
 
+    setSubmitting(true);
     try {
-      const baseURL = ''; // React injects proxy or you can use relative if configured
-      await axios.post(`${baseURL}/api/auth/change-password`, {
+      await axios.post('/api/auth/change-password', {
         current_password: currentPassword,
         new_password: newPassword
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      setSuccess("Password changed successfully!");
-      setTimeout(() => {
-        onClose();
-      }, 1500);
+      setSuccess('Password changed successfully.');
+      window.setTimeout(onClose, 1200);
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to change password");
+      setError(err.response?.data?.detail || 'Failed to change password.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="glass-card" style={{ padding: '2rem', width: '400px', background: 'white', position: 'relative' }}>
-        <button onClick={onClose} style={{ position: 'absolute', top: '15px', right: '15px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.2rem' }}>✖</button>
-        <h3 style={{ margin: '0 0 1.5rem 0', color: 'var(--primary)' }}>Change Password</h3>
-        
-        {error && <div style={{ background: '#fee2e2', color: '#dc2626', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.9rem' }}>{error}</div>}
-        {success && <div style={{ background: '#dcfce7', color: '#16a34a', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.9rem' }}>{success}</div>}
-        
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label style={{ fontSize: '0.85rem', marginBottom: '0.25rem', display: 'block' }}>Current Password</label>
-            <input type="password" required className="input-glass" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.85rem', marginBottom: '0.25rem', display: 'block' }}>New Password</label>
-            <input type="password" required className="input-glass" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
-          </div>
-          <div>
-            <label style={{ fontSize: '0.85rem', marginBottom: '0.25rem', display: 'block' }}>Confirm New Password</label>
-            <input type="password" required className="input-glass" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-          </div>
-          <button type="submit" className="btn-primary" style={{ marginTop: '0.5rem' }}>Update Password</button>
-        </form>
-      </div>
-    </div>
+    <DialogFrame title="Change password" onClose={onClose} className="change-password-dialog" initialFocus="input">
+      {error && <div className="auth-error" role="alert">{error}</div>}
+      {success && <div className="profile-notice profile-notice-success" role="status">{success}</div>}
+      <form onSubmit={handleSubmit} className="change-password-form">
+        <div className="ui-form-field"><label htmlFor="current-password">Current password</label><input id="current-password" type="password" autoComplete="current-password" required className="input-glass" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
+        <div className="ui-form-field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" autoComplete="new-password" minLength={6} required className="input-glass" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></div>
+        <div className="ui-form-field"><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" autoComplete="new-password" minLength={6} required className="input-glass" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></div>
+        <div className="ui-dialog-actions">
+          <button type="button" onClick={onClose} className="btn-secondary ui-dialog-cancel">Cancel</button>
+          <button type="submit" className="btn-primary" disabled={submitting}>{submitting ? 'Saving…' : 'Update password'}</button>
+        </div>
+      </form>
+    </DialogFrame>
   );
 };
 

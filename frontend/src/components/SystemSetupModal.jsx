@@ -9,7 +9,7 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
   const [departments, setDepartments] = useState([]);
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   const [promptModal, setPromptModal] = useState({ isOpen: false, title: '', message: '', defaultValue: '', placeholder: '', onConfirm: null, onCancel: () => setPromptModal({ isOpen: false }) });
@@ -157,15 +157,15 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
       <PromptModal {...promptModal} />
       <ConfirmModal {...confirmModal} />
       <AlertModal {...alertModal} onClose={() => setAlertModal({ ...alertModal, isOpen: false })} />
-      <RolePermissionsModal 
-        isOpen={roleModal.isOpen} 
-        role={roleModal.role} 
+      <RolePermissionsModal
+        isOpen={roleModal.isOpen}
+        role={roleModal.role}
         onClose={() => setRoleModal({ isOpen: false, role: null })}
         onSave={handleSaveRole}
       />
 
-      <div className="glass-card animate-fade-in" style={{ 
-        width: '100%', maxWidth: '600px', background: 'rgba(255,255,255,0.98)', 
+      <div className="glass-card animate-fade-in system-setup-modal-card" role="dialog" aria-modal="true" aria-labelledby="system-setup-title" style={{
+        width: '100%', maxWidth: '600px', background: 'rgba(255,255,255,0.98)',
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         overflow: 'hidden'
       }}>
@@ -173,7 +173,7 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid var(--glass-border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
             <Settings size={24} color="var(--primary)" />
-            <h2 style={{ margin: 0, color: 'var(--primary)' }}>System Setup</h2>
+            <h2 id="system-setup-title" style={{ margin: 0, color: 'var(--primary)' }}>System Setup</h2>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
             <X size={24} />
@@ -182,9 +182,9 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--glass-border)', padding: '0 2rem' }}>
-          <button 
+          <button
             onClick={() => setActiveTab('departments')}
-            style={{ 
+            style={{
               padding: '1rem 1.5rem', background: 'none', border: 'none', cursor: 'pointer',
               fontWeight: activeTab === 'departments' ? 600 : 400,
               color: activeTab === 'departments' ? 'var(--primary)' : 'var(--text-muted)',
@@ -193,9 +193,9 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
           >
             Departments
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('roles')}
-            style={{ 
+            style={{
               padding: '1rem 1.5rem', background: 'none', border: 'none', cursor: 'pointer',
               fontWeight: activeTab === 'roles' ? 600 : 400,
               color: activeTab === 'roles' ? 'var(--primary)' : 'var(--text-muted)',
@@ -213,7 +213,7 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
               Manage {activeTab === 'departments' ? 'university departments' : 'administrative system roles'}.
             </p>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button 
+              <button
                 onClick={async () => {
                   try {
                     setLoading(true);
@@ -224,16 +224,16 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
                     showAlert('Migration failed', true);
                     setLoading(false);
                   }
-                }} 
-                className="btn-secondary" 
+                }}
+                className="btn-secondary"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
                 title="Populate list with existing data"
               >
                 Migrate Data
               </button>
-              <button 
-                onClick={() => handleAdd(activeTab)} 
-                className="btn-primary" 
+              <button
+                onClick={() => handleAdd(activeTab)}
+                className="btn-primary"
                 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
               >
                 <Plus size={18} /> Add New
@@ -252,7 +252,7 @@ const SystemSetupModal = ({ isOpen, onClose }) => {
               ) : (
                 currentList.map(item => {
                   const isCoreRole = activeTab === 'roles' && ['student', 'faculty', 'coordinator', 'club_coordinator', 'finance', 'admin'].includes(item.name.toLowerCase());
-                  
+
                   return (
                     <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1.5rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
                       <span style={{ fontWeight: 500, color: '#0f172a' }}>{item.name}</span>

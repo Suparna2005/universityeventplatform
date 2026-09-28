@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { UserPlus, Users, Search, Filter, Award, Upload } from 'lucide-react';
+import { UserPlus, Users, Search, Filter, Upload } from 'lucide-react';
 import { ConfirmModal, AlertModal } from '../../components/Modals';
 import { useRef, useContext } from 'react';
 import { AuthContext } from '../../context/AuthContext';
+import { TableToolbar } from '../../components/UI';
 
 const UserManagement = ({ externalActiveTab }) => {
   const { user } = useContext(AuthContext);
@@ -157,8 +158,6 @@ const UserManagement = ({ externalActiveTab }) => {
     setMessage('');
     setError('');
     
-    const targetRole = formData.role.toLowerCase().trim();
-
     try {
       if (editingUserId) {
         await axios.put(`${baseURL}/api/admin/users/${editingUserId}`, formData, {
@@ -422,8 +421,6 @@ const UserManagement = ({ externalActiveTab }) => {
     );
   };
 
-  const studentDepts = [...new Set(students.map(s => s.department).filter(Boolean))].sort();
-
   const facultyRequests = pendingRequests.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase()));
   const studentRequests = pendingRequests.filter(r => r.role && r.role.toLowerCase() === 'student');
   const facultyLeaveRequests = pendingLeaveRequests.filter(r => r.role && ['faculty', 'coordinator', 'club_coordinator'].includes(r.role.toLowerCase()));
@@ -441,11 +438,6 @@ const UserManagement = ({ externalActiveTab }) => {
       count: searchedUsers.filter(u => u.role === role).length
     };
   });
-
-  const departments = [...new Set([
-    ...usersList.map(user => user.department),
-    ...clubsList.map(club => club.department)
-  ].filter(Boolean))].sort();
 
   const isDeptCoordinator = formData.role.toLowerCase().includes('coordinator') && !formData.role.toLowerCase().includes('club');
   const isClubCoordinator = formData.role.toLowerCase().includes('coordinator') && formData.role.toLowerCase().includes('club');
@@ -838,7 +830,7 @@ const UserManagement = ({ externalActiveTab }) => {
           </div>
 
           {/* Search & Filter Controls */}
-          <div className="user-directory-filters" style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <TableToolbar className="user-directory-filters">
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '0.5rem 1rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
               <Filter size={18} color="var(--text-muted)" />
@@ -893,7 +885,7 @@ const UserManagement = ({ externalActiveTab }) => {
                 />
               </div>
 
-          </div>
+          </TableToolbar>
 
           {/* Table */}
           {activeTab.startsWith('requests') ? renderRequestsTable(activeTab) : activeTab === 'student' ? renderStudentTableGrouped(activeUsers) : renderTable(activeUsers)}

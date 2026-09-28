@@ -1,40 +1,40 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Check, CircleAlert } from 'lucide-react';
+import { DialogFrame } from './UI';
 
 export const PromptModal = ({ isOpen, title, message, defaultValue = '', placeholder = '', onConfirm, onCancel }) => {
   const [value, setValue] = useState(defaultValue);
 
+  useEffect(() => {
+    if (isOpen) setValue(defaultValue);
+  }, [isOpen, defaultValue]);
+
   if (!isOpen) return null;
 
+  const submit = (event) => {
+    event.preventDefault();
+    onConfirm?.(value);
+    setValue(defaultValue);
+  };
+
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.7)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      zIndex: 9999
-    }}>
-      <div className="glass-card animate-fade-in" style={{ padding: '2rem', width: '100%', maxWidth: '400px', background: 'rgba(255,255,255,0.95)' }}>
-        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)' }}>{title}</h3>
-        {message && <p style={{ color: 'var(--text-muted)', marginBottom: '1rem', fontSize: '0.95rem' }}>{message}</p>}
-        
-        <input 
-          type="text" 
-          value={value} 
-          onChange={(e) => setValue(e.target.value)} 
+    <DialogFrame title={title} onClose={onCancel} className="ui-prompt-dialog" initialFocus="input">
+      {message && <p className="ui-dialog-description">{message}</p>}
+      <form onSubmit={submit}>
+        <input
+          type="text"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
           placeholder={placeholder}
           className="input-glass"
-          autoFocus
+          aria-label={title}
         />
-
-        <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>Cancel</button>
-          <button onClick={() => {
-            onConfirm(value);
-            setValue(defaultValue);
-          }} className="btn-primary" style={{ padding: '0.5rem 1rem' }}>Submit</button>
+        <div className="ui-dialog-actions">
+          <button type="button" onClick={onCancel} className="btn-secondary ui-dialog-cancel">Cancel</button>
+          <button type="submit" className="btn-primary">Submit</button>
         </div>
-      </div>
-    </div>
+      </form>
+    </DialogFrame>
   );
 };
 
@@ -42,50 +42,28 @@ export const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, conf
   if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.7)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      zIndex: 9999
-    }}>
-      <div className="glass-card animate-fade-in" style={{ padding: '2rem', width: '100%', maxWidth: '400px', background: 'rgba(255,255,255,0.95)' }}>
-        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)' }}>{title}</h3>
-        {message && <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>{message}</p>}
-
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-          <button onClick={onCancel} className="btn-secondary" style={{ padding: '0.5rem 1rem' }}>Cancel</button>
-          <button onClick={onConfirm} className="btn-primary" style={{ padding: '0.5rem 1rem', background: confirmColor, borderColor: confirmColor }}>{confirmText}</button>
-        </div>
+    <DialogFrame title={title} onClose={onCancel} className="ui-confirm-dialog" initialFocus=".ui-dialog-cancel">
+      {message && <p className="ui-dialog-description">{message}</p>}
+      <div className="ui-dialog-actions">
+        <button type="button" onClick={onCancel} className="btn-secondary ui-dialog-cancel">Cancel</button>
+        <button type="button" onClick={onConfirm} className="btn-primary" style={{ background: confirmColor }}>{confirmText}</button>
       </div>
-    </div>
+    </DialogFrame>
   );
 };
 
-export const AlertModal = ({ isOpen, title = "Notification", message, onClose, isError = false }) => {
+export const AlertModal = ({ isOpen, title = 'Notification', message, onClose, isError = false }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="app-alert-backdrop" style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.7)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      zIndex: 10000
-    }}>
-      <div className="app-alert-card animate-fade-in" style={{ padding: '2rem', width: '100%', maxWidth: '400px', background: 'rgba(255,255,255,0.98)', textAlign: 'center' }}>
-        <div style={{ marginBottom: '1rem' }}>
-          {isError ? (
-            <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: '1.5rem', fontWeight: 'bold' }}>!</div>
-          ) : (
-            <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', fontSize: '1.5rem', fontWeight: 'bold' }}>✓</div>
-          )}
-        </div>
-        <h3 style={{ margin: '0 0 1rem 0', color: 'var(--text-main)' }}>{title}</h3>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>{message}</p>
-
-        <button onClick={onClose} className="btn-primary" style={{ padding: '0.6rem 2rem', width: '100%' }}>Okay</button>
+    <DialogFrame title={title} onClose={onClose} className="ui-alert-dialog" initialFocus="button">
+      <div className={`ui-dialog-status-icon${isError ? ' is-error' : ''}`} aria-hidden="true">
+        {isError ? <CircleAlert size={25} /> : <Check size={25} />}
       </div>
-    </div>
+      <p className="ui-dialog-description">{message}</p>
+      <div className="ui-dialog-actions">
+        <button type="button" onClick={onClose} className="btn-primary">Okay</button>
+      </div>
+    </DialogFrame>
   );
 };

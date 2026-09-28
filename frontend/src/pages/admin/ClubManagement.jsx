@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { Users, Edit2, Check, X, Trash2 } from 'lucide-react';
-import { ConfirmModal } from '../../components/Modals';
+import { AlertModal, ConfirmModal } from '../../components/Modals';
 
 const ClubManagement = () => {
   const [clubs, setClubs] = useState([]);
@@ -13,6 +13,7 @@ const ClubManagement = () => {
   const [showRequests, setShowRequests] = useState(false);
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   
   // Edit State
   const [editingMember, setEditingMember] = useState(null);
@@ -24,6 +25,10 @@ const ClubManagement = () => {
 
   const { user } = useContext(AuthContext);
   const baseURL = '';
+  const notify = (message) => {
+    const isError = /error|failed|could not|unable/i.test(String(message));
+    setAlertModal({ isOpen: true, title: isError ? 'Action could not be completed' : 'Update complete', message: String(message), isError });
+  };
 
   const [allSystemUsers, setAllSystemUsers] = useState([]);
 
@@ -64,12 +69,12 @@ const ClubManagement = () => {
       const successMessage = newClubData.coordinator_email && newClubData.coordinator_email.trim() !== ''
         ? 'Club created successfully! Coordinator has been notified via email.'
         : 'Club created successfully!';
-      alert(successMessage);
+      notify(successMessage);
       setShowCreateModal(false);
       setNewClubData({ name: '', description: '', club_type: 'university', department: '', coordinator_email: '' });
       fetchClubs();
     } catch (err) {
-      alert(`Error creating club: ${err.response?.data?.detail || err.message}`);
+      notify(`Error creating club: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -79,11 +84,11 @@ const ClubManagement = () => {
       await axios.put(`${baseURL}/api/clubs/${editClubData.id}`, editClubData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Club updated successfully!');
+      notify('Club updated successfully!');
       setShowEditClubModal(false);
       fetchClubs();
     } catch (err) {
-      alert(`Error updating club: ${err.response?.data?.detail || err.message}`);
+      notify(`Error updating club: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -101,11 +106,11 @@ const ClubManagement = () => {
           await axios.delete(`${baseURL}/api/clubs/${clubId}`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
-          alert('Club deleted successfully!');
+          notify('Club deleted successfully!');
           setSelectedClub(null);
           fetchClubs();
         } catch (err) {
-          alert(`Error deleting club: ${err.response?.data?.detail || err.message}`);
+          notify(`Error deleting club: ${err.response?.data?.detail || err.message}`);
         }
       }
     });
@@ -140,11 +145,11 @@ const ClubManagement = () => {
       } else {
         await axios.post(`${baseURL}/api/clubs/requests/${reqId}/${action}`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
       }
-      alert(`Request ${action}ed successfully!`);
+      notify(`Request ${action}ed successfully!`);
       // Refresh the club to get updated members/requests
       handleSelectClub(selectedClub);
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Action failed'}`);
+      notify(`Error: ${err.response?.data?.detail || 'Action failed'}`);
     }
   };
 
@@ -162,7 +167,7 @@ const ClubManagement = () => {
       link.click();
       link.parentNode.removeChild(link);
     } catch (err) {
-      alert(`Error downloading CSV: ${err.response?.data?.detail || err.message}`);
+      notify(`Error downloading CSV: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -175,7 +180,7 @@ const ClubManagement = () => {
       });
       setMembers(members.map(m => m.user_id === userId ? { ...m, activity_points: parseInt(newPoints) } : m));
     } catch (err) {
-      alert(`Error updating points: ${err.response?.data?.detail || err.message}`);
+      notify(`Error updating points: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -188,9 +193,9 @@ const ClubManagement = () => {
       await axios.post(`${baseURL}/api/clubs/${selectedClub}/gallery`, formData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' }
       });
-      alert('Photo uploaded to gallery!');
+      notify('Photo uploaded to gallery!');
     } catch (err) {
-      alert(`Error uploading photo: ${err.response?.data?.detail || err.message}`);
+      notify(`Error uploading photo: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -232,7 +237,7 @@ const ClubManagement = () => {
       ));
       setEditingMember(null);
     } catch (err) {
-      alert(`Error updating member: ${err.response?.data?.detail || err.message}`);
+      notify(`Error updating member: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -252,7 +257,7 @@ const ClubManagement = () => {
           });
           setMembers(members.filter(m => m.user_id !== userId));
         } catch (err) {
-          alert(`Error removing member: ${err.response?.data?.detail || err.message}`);
+          notify(`Error removing member: ${err.response?.data?.detail || err.message}`);
         }
       }
     });
@@ -294,9 +299,9 @@ const ClubManagement = () => {
       });
       setClubs(prev => prev.map(club => club.id === selectedClub ? { ...club, role_permissions: response.data.role_permissions } : club));
       setShowRolePermissionsModal(false);
-      alert('Club role permissions saved.');
+      notify('Club role permissions saved.');
     } catch (err) {
-      alert(`Could not save role permissions: ${err.response?.data?.detail || err.message}`);
+      notify(`Could not save role permissions: ${err.response?.data?.detail || err.message}`);
     }
   };
   const [manualAddData, setManualAddData] = useState({
@@ -356,12 +361,12 @@ const ClubManagement = () => {
       }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Member added successfully!');
+      notify('Member added successfully!');
       handleSelectClub(selectedClub);
       setShowAddMemberModal(false);
       setManualAddData({ email: '', role: 'member', name: '', system_role: 'student', department: '' });
     } catch (err) {
-      alert(`Error adding member: ${err.response?.data?.detail || err.message}`);
+      notify(`Error adding member: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -379,12 +384,12 @@ const ClubManagement = () => {
           'Content-Type': 'multipart/form-data'
         }
       });
-      alert(res.data.message || 'Members imported successfully.');
+      notify(res.data.message || 'Members imported successfully.');
       setCsvFile(null);
       setShowAddMemberModal(false);
       handleSelectClub(selectedClub);
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error uploading CSV');
+      notify(err.response?.data?.detail || 'Error uploading CSV');
     }
   };
 
@@ -393,14 +398,15 @@ const ClubManagement = () => {
   return (
     <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
       <ConfirmModal {...confirmModal} />
+      <AlertModal {...alertModal} onClose={() => setAlertModal((previous) => ({ ...previous, isOpen: false }))} />
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
         <Users size={32} color="var(--primary)" />
         <h2 style={{ fontSize: '2rem', margin: 0 }}>Club Management</h2>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '2rem' }}>
+      <div className="clubs-management-layout" style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '2rem' }}>
         {/* Sidebar: List of Clubs */}
-        <div className="glass-card" style={{ padding: '1rem', height: 'fit-content' }}>
+        <div className="glass-card club-list-panel" style={{ padding: '1rem', height: 'fit-content' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <h3 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--primary)' }}>All Clubs</h3>
             {user?.role === 'admin' && (
@@ -434,7 +440,6 @@ const ClubManagement = () => {
             {clubs.map(club => (
               <li 
                 key={club.id} 
-                onClick={() => handleSelectClub(club.id)}
                 style={{ 
                   padding: '0.75rem', 
                   cursor: 'pointer', 
@@ -445,14 +450,16 @@ const ClubManagement = () => {
                   transition: 'background 0.2s'
                 }}
               >
-                {club.name}
+                <button type="button" aria-pressed={selectedClub === club.id} onClick={() => handleSelectClub(club.id)}>
+                  {club.name}
+                </button>
               </li>
             ))}
           </ul>
         </div>
 
         {/* Main Content: Members List */}
-        <div className="glass-card" style={{ padding: '2rem' }}>
+        <div className="glass-card club-members-panel" style={{ padding: '2rem' }}>
           {selectedClub ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -490,6 +497,7 @@ const ClubManagement = () => {
                     </span>
                   )}
                   <span className="badge badge-secondary">{members.length} Total Members</span>
+                  {canManageClub('manage_members') && <button type="button" onClick={handleExportCSV} className="btn-secondary club-export-button">Export members CSV</button>}
                   {user?.role === 'admin' && (
                     <>
                       {canManageClub('manage_members') && <button onClick={() => setShowAddMemberModal(true)} className="btn-primary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.9rem' }}>
@@ -532,10 +540,10 @@ const ClubManagement = () => {
               )}
 
               {showRolePermissionsModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.68)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem' }}>
-                  <div className="glass-card" style={{ width: '100%', maxWidth: '720px', maxHeight: '90vh', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                createPortal(<div className="club-role-access-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setShowRolePermissionsModal(false); }}>
+                  <div className="glass-card club-role-access-dialog" role="dialog" aria-modal="true" aria-labelledby="club-role-access-title">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.25rem 1.5rem', borderBottom: '1px solid #e2e8f0' }}>
-                      <div><h3 style={{ margin: 0, color: 'var(--primary)' }}>Configure Club Role Access</h3><small style={{ color: 'var(--text-muted)' }}>Permissions apply only within this club.</small></div>
+                      <div><h3 id="club-role-access-title" style={{ margin: 0, color: 'var(--primary)' }}>Configure Club Role Access</h3><small style={{ color: 'var(--text-muted)' }}>Permissions apply only within this club.</small></div>
                       <button onClick={() => setShowRolePermissionsModal(false)} style={{ background: 'none', border: 0, cursor: 'pointer' }} aria-label="Close">×</button>
                     </div>
                     <div style={{ padding: '1.25rem 1.5rem', overflowY: 'auto' }}>
@@ -560,7 +568,7 @@ const ClubManagement = () => {
                       <button className="btn-primary" onClick={saveRolePermissions}>Save Permissions</button>
                     </div>
                   </div>
-                </div>
+                </div>, document.body)
               )}
 
               {showAddMemberModal && (
@@ -711,7 +719,7 @@ const ClubManagement = () => {
                         </div>
 
                         <div style={{ padding: '0.9rem 1rem', border: '1px solid #dbe3ed', borderRadius: '8px', background: '#f8fafc', fontSize: '0.85rem' }}>
-                          <strong style={{ display: 'block', marginBottom: '0.45rem', color: '#1e293b' }}>Selected user's assigned roles</strong>
+                          <strong style={{ display: 'block', marginBottom: '0.45rem', color: '#1e293b' }}>Selected user&apos;s assigned roles</strong>
                           {loadingSelectedUserAccess ? <span style={{ color: '#64748b' }}>Loading current roles…</span> : selectedUserAccess ? (
                             <>
                               <div style={{ color: '#334155', marginBottom: '0.35rem' }}>
@@ -766,7 +774,7 @@ const ClubManagement = () => {
                     <div key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '1rem', borderRadius: '6px', marginBottom: '0.5rem' }}>
                       <div>
                         <strong>{req.user_name}</strong> <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>({req.user_email})</span>
-                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#4b5563' }}>"{req.message}"</p>
+                        <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem', color: '#4b5563' }}>&quot;{req.message}&quot;</p>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button onClick={() => handleRequestAction(req.id, 'forward')} className="btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}>Forward to Admin</button>

@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { LoadingState } from '../components/UI';
 
 export const AuthContext = createContext(null);
 
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, register, logout, baseURL }}>
-      {!loading && children}
+      {loading ? <div className="app-initial-loading"><LoadingState label="Loading your university portal…" /></div> : children}
     </AuthContext.Provider>
   );
 };

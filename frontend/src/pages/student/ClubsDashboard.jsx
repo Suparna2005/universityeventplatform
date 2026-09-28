@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { Users, Star, Trophy, Calendar, CheckCircle } from 'lucide-react';
 import { PromptModal, ConfirmModal, AlertModal } from '../../components/Modals';
+import PortalBrand from '../../components/PortalBrand';
+import { LoadingState } from '../../components/UI';
 
 const ClubsDashboard = () => {
   const [clubs, setClubs] = useState([]);
@@ -22,9 +25,18 @@ const ClubsDashboard = () => {
   };
   
   const { user } = useContext(AuthContext);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isStandalone = location.pathname === '/clubs';
   const baseURL = '';
 
-  const canJoinClubs = user && (user.permissions?.permissions?.student_portal?.join_clubs_direct === true || user.permissions?.permissions?.student_portal?.join_clubs_via_coordinator === true);
+  const isStudentRole = user?.role === 'student' || user?.permissions?.dashboard_type === 'student';
+  const studentPortalPerms = user?.permissions?.permissions?.student_portal || {};
+  
+  const joinDirect = studentPortalPerms.join_clubs_direct ?? false; // Usually false by default
+  const joinViaCoordinator = studentPortalPerms.join_clubs_via_coordinator ?? isStudentRole; // True by default for students
+  
+  const canJoinClubs = user && (joinDirect || joinViaCoordinator);
 
   const [myRequests, setMyRequests] = useState({ join_requests: [], leave_requests: [] });
 
@@ -186,10 +198,17 @@ const ClubsDashboard = () => {
     });
   };
 
-  if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}>Loading Clubs Directory...</div>;
+  if (loading) return <LoadingState label="Loading the clubs directory…" />;
 
   return (
     <div className="dashboard-theme clubs-page animate-fade-in">
+      {isStandalone && <header className="standalone-topbar">
+        <PortalBrand portal="University Portal" />
+        <div className="standalone-topbar-actions">
+          <span>Welcome, {user?.name}</span>
+          <button onClick={() => navigate(['student', 'faculty', 'mentor'].includes(user?.role) || user?.permissions?.dashboard_type === 'student' ? '/dashboard' : '/admin')} className="btn-secondary">Main dashboard</button>
+        </div>
+      </header>}
       
       {(myRequests.join_requests.length > 0 || myRequests.leave_requests.length > 0) && (
         <div className="glass-card" style={{ padding: '1.5rem', marginBottom: '2rem', border: '2px solid var(--primary)' }}>

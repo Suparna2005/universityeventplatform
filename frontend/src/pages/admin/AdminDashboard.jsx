@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useContext, useRef } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Brain, UserCircle, QrCode, Settings, CalendarDays, Users, CheckCircle2, BarChart3, MessageSquare, Download, Upload, Award, Sparkles, Pencil, Trash2, FileText } from 'lucide-react';
+import { UserCircle, QrCode, Settings, CalendarDays, Users, CheckCircle2, BarChart3, MessageSquare, Download, Upload, Award, Sparkles, Pencil, Trash2, FileText, Building2, LogOut, Wallet, MapPin, UserCheck, ThumbsUp, User, Lock, Paperclip, Info, MoreVertical } from 'lucide-react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import BudgetDashboard from './BudgetDashboard';
 import AnalyticsDashboard from './AnalyticsDashboard';
@@ -15,6 +15,30 @@ import ChangePasswordModal from '../ChangePasswordModal';
 import { PromptModal, ConfirmModal, AlertModal } from '../../components/Modals';
 import SystemSetupModal from '../../components/SystemSetupModal';
 import PortalBrand from '../../components/PortalBrand';
+import { EmptyState, LoadingState, StatusBadge } from '../../components/UI';
+
+const MENU_ICONS = {
+  admin_dash_events: BarChart3,
+  admin_events_published: CalendarDays,
+  admin_events_completed: CheckCircle2,
+  admin_events_pending: CheckCircle2,
+  admin_clubs_all: Building2,
+  admin_clubs_browse: Users,
+  admin_users_students: Users,
+  admin_req_faculty: UserCircle,
+  admin_req_student: UserCircle,
+  events_create: CalendarDays,
+  events_submitted: FileText,
+  events_approved: CheckCircle2,
+  events_published: CalendarDays,
+  events_completed: Award,
+  attendance_scanner: QrCode,
+  participants_list: Users,
+  pending_finance: Wallet,
+  coordinator_students: Users,
+  account_password: Settings,
+  account_signout: LogOut
+};
 
 const getEventTimelineStatus = (event) => {
   if (event.state === 'completed') return 'Completed';
@@ -34,7 +58,6 @@ const AdminDashboard = () => {
   const [sidebarTick, setSidebarTick] = useState(0);
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [scanningEventId, setScanningEventId] = useState(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   
@@ -47,9 +70,6 @@ const AdminDashboard = () => {
   });
   const [editEventId, setEditEventId] = useState(null);
   const [clubs, setClubs] = useState([]);
-  const [searchClubQuery, setSearchClubQuery] = useState('');
-  const [editingClubId, setEditingClubId] = useState(null);
-  const [editClubForm, setEditClubForm] = useState({ name: '', description: '' });
   
   // Feedback Viewing State
   const [viewFeedbackEventId, setViewFeedbackEventId] = useState(null);
@@ -61,14 +81,23 @@ const AdminDashboard = () => {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
   const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   const [pendingReqCounts, setPendingReqCounts] = useState({ faculty: 0, student: 0 });
+  const [clubJoinRequests, setClubJoinRequests] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
+  const [filterClub, setFilterClub] = useState('');
 
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const baseURL = '';
 
+  const notify = (message) => {
+    const isError = /error|failed|could not|unable|unavailable/i.test(String(message));
+    setAlertModal({ isOpen: true, title: isError ? 'Action could not be completed' : 'Update complete', message: String(message), isError });
+  };
+
   const handleAIRecommendReq = async (reqType, fieldName) => {
     if (!newEvent.title) {
-      alert("Please enter a Program Title first so the AI knows what to recommend!");
+      notify("Please enter a Program Title first so the AI knows what to recommend!");
       return;
     }
     setAiRecommendReqLoading(reqType);
@@ -78,10 +107,29 @@ const AdminDashboard = () => {
       });
       setNewEvent(prev => ({ ...prev, [fieldName]: res.data.recommendation }));
     } catch (err) {
-      alert("AI recommendation failed.");
+      notify("AI recommendation failed.");
     }
     setAiRecommendReqLoading(false);
   };
+
+  
+  const fetchClubJoinRequests = async () => {
+    try {
+      const endpoint = user.role === 'admin' ? '/api/clubs/admin-requests' : '/api/clubs/department-requests';
+      const res = await axios.get(`${baseURL}${endpoint}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setClubJoinRequests(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubMenu === 'coordinator_club_reqs' || activeSubMenu === 'admin_club_reqs') {
+      fetchClubJoinRequests();
+    }
+  }, [activeSubMenu]);
 
   const fetchAdminData = async () => {
     const [eventsResult, clubsResult] = await Promise.allSettled([
@@ -94,7 +142,7 @@ const AdminDashboard = () => {
       setEvents(eventsResult.value.data);
     } else {
       console.error('Failed to load events:', eventsResult.reason);
-      alert(`Failed to load events: ${eventsResult.reason.response?.data?.detail || eventsResult.reason.message}`);
+      notify(`Failed to load events: ${eventsResult.reason.response?.data?.detail || eventsResult.reason.message}`);
     }
     if (clubsResult.status === 'fulfilled') {
       setClubs(clubsResult.value.data);
@@ -138,7 +186,7 @@ const AdminDashboard = () => {
   const handleGenerateAITemplate = async (eventId) => {
     const prompt = aiPrompts[eventId];
     if (!prompt) {
-      alert("Please enter a style or colors for the AI!");
+      notify("Please enter a style or colors for the AI!");
       return;
     }
     
@@ -194,7 +242,6 @@ const AdminDashboard = () => {
         setAlertModal({ isOpen: true, title: 'Event scheduled', message: 'Your event has been sent to Admin for initial approval.', isError: false });
       }
       
-      setShowCreateForm(false);
       setEditEventId(null);
       
       // Instantly inject the event into the local state so it appears without network delay
@@ -224,60 +271,6 @@ const AdminDashboard = () => {
     } catch (err) {
       setAlertModal({ isOpen: true, title: 'Could not save event', message: err.response?.data?.detail || 'Please try again.', isError: true });
     }
-  };
-
-  const [newClubName, setNewClubName] = useState('');
-  const handleCreateClub = async (e) => {
-    e.preventDefault();
-    if (!newClubName.trim()) return;
-    try {
-      const res = await axios.post(`${baseURL}/api/clubs/`, {
-        name: newClubName,
-        description: "Official University Club"
-      }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert('Club added successfully!');
-      setNewClubName('');
-      
-      // Instantly update local state to ensure it's in the dropdown immediately
-      setClubs(prev => [...prev, { id: res.data.id, name: res.data.name }]);
-      
-      await fetchAdminData(); // Refresh the rest of the data
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to create club'}`);
-    }
-  };
-
-  const handleUpdateClub = async (e, clubId) => {
-    e.preventDefault();
-    try {
-      await axios.put(`${baseURL}/api/clubs/${clubId}`, editClubForm, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      alert('Club updated successfully!');
-      setEditingClubId(null);
-      await fetchAdminData();
-    } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to update club'}`);
-    }
-  };
-
-  const handleDeleteClub = (clubId) => {
-    setConfirmModal({
-      isOpen: true,
-      title: 'Delete Club',
-      message: 'Are you sure you want to delete this club? Events associated with it may cause deletion to fail.',
-      confirmText: 'Delete',
-      confirmColor: '#dc2626',
-      onCancel: () => setConfirmModal(prev => ({ ...prev, isOpen: false })),
-      onConfirm: async () => {
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-        try {
-          await axios.delete(`${baseURL}/api/clubs/${clubId}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-          alert("Club deleted successfully!");
-          await fetchAdminData();
-        } catch (err) {
-          alert(`Error: ${err.response?.data?.detail || 'Failed to delete club'}`);
-        }
-      }
-    });
   };
 
   const handleEditClick = (event) => {
@@ -337,9 +330,9 @@ const AdminDashboard = () => {
         if (!reason) return;
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/request-changes`, { reason }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-          alert("Changes requested! Event sent back to Coordinator.");
+          notify("Changes requested! Event sent back to Coordinator.");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -357,9 +350,9 @@ const AdminDashboard = () => {
         if (!reason) return;
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/reject`, { reason }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-          alert("Event rejected permanently.");
+          notify("Event rejected permanently.");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -375,9 +368,9 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           const response = await axios.put(`${baseURL}/api/admin/events/${eventId}/verify-expenses`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-          alert(response.data.message || "Expenses verified! Event is now completed.");
+          notify(response.data.message || "Expenses verified! Event is now completed.");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -393,9 +386,9 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-initial`);
-          alert("Budget request sent to Finance successfully!");
+          notify("Budget request sent to Finance successfully!");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -411,9 +404,9 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-budget`);
-          alert("Budget approved! Sent back to Admin.");
+          notify("Budget approved! Sent back to Admin.");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -429,9 +422,9 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-admin-final`);
-          alert("Final approval sent to Coordinator!");
+          notify("Final approval sent to Coordinator!");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -448,9 +441,9 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/publish`);
-          alert("Event published to Students successfully!");
+          notify("Event published to Students successfully!");
           fetchAdminData();
-        } catch (err) { alert(`Error: ${err.response?.data?.detail}`); }
+        } catch (err) { notify(`Error: ${err.response?.data?.detail}`); }
       }
     });
   };
@@ -490,24 +483,15 @@ const AdminDashboard = () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
         try {
           await axios.put(`${baseURL}/api/admin/events/${eventId}/approve-completion`);
-          alert("Event completion approved successfully!");
+          notify("Event completion approved successfully!");
           fetchAdminData();
         } catch (err) {
-          alert(`Error: ${err.response?.data?.detail || 'Failed to approve event completion'}`);
+          notify(`Error: ${err.response?.data?.detail || 'Failed to approve event completion'}`);
         }
       }
     });
   };
 
-
-  const handlePublishCertificates = async (eventId) => {
-    try {
-      const response = await axios.put(`${baseURL}/api/certificates/events/${eventId}/publish`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-      setAlertModal({ isOpen: true, title: 'Certificates published', message: response.data.message, isError: false });
-    } catch (err) {
-      setAlertModal({ isOpen: true, title: 'Could not publish certificates', message: err.response?.data?.detail || 'Please try again.', isError: true });
-    }
-  };
 
   const handleExportRegistrations = async (eventId) => {
     try {
@@ -522,7 +506,7 @@ const AdminDashboard = () => {
       link.click();
       link.parentNode.removeChild(link);
     } catch (err) {
-      alert(`Error downloading CSV: ${err.response?.data?.detail || err.message}`);
+      notify(`Error downloading CSV: ${err.response?.data?.detail || err.message}`);
     }
   };
 
@@ -562,12 +546,12 @@ const AdminDashboard = () => {
         setScanningEventId(null);
         try {
           const res = await axios.post(`${baseURL}/api/attendance/check-in`, { secure_token: decodedText });
-          alert(`Check-in Successful! ${res.data.student_name}`);
+          notify(`Check-in Successful! ${res.data.student_name}`);
           fetchAdminData();
         } catch (err) {
-          alert(`Error: ${err.response?.data?.detail || 'Check-in failed'}`);
+          notify(`Error: ${err.response?.data?.detail || 'Check-in failed'}`);
         }
-      }, (error) => {
+      }, (_error) => {
         // ignore continuous scan errors
       });
     }, 100);
@@ -589,12 +573,14 @@ const AdminDashboard = () => {
           items: [
             { id: 'admin_clubs_all', label: 'Manage Clubs' },
             { id: 'admin_clubs_browse', label: 'Active Clubs Directory' },
+            { id: 'coordinator_club_reqs', label: 'Club Join Requests' },
             { id: 'admin_users_students', label: 'Manage Users' },
           ]
         },
         {
           category: 'Pending Requests',
           items: [
+            { id: 'admin_club_reqs', label: 'Club Join Requests' },
             { id: 'admin_req_faculty', label: 'Faculty Requests', badge: pendingReqCounts.faculty > 0 },
             { id: 'admin_req_student', label: 'Student Requests', badge: pendingReqCounts.student > 0 }
           ]
@@ -812,8 +798,8 @@ const AdminDashboard = () => {
     const attended = Number(event.attended_count || 0);
     const absent = Math.max(registrations - attended, 0);
     const attendanceRate = registrations ? Math.round((attended / registrations) * 100) : 0;
-    const canEditEvent = user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events;
-    const canDeleteEvent = ['admin', 'coordinator', 'mentor'].includes(user.role) || user.permissions?.permissions?.events?.delete_events;
+    const canEditEvent = user.role.includes('coordinator') || user.permissions?.permissions?.events?.manage_events;
+    const canDeleteEvent = ['admin', 'mentor'].includes(user.role) || user.role.includes('coordinator') || user.permissions?.permissions?.events?.delete_events;
 
     return (
       <article className="completed-event-card" key={event.id}>
@@ -928,7 +914,7 @@ const AdminDashboard = () => {
           <PortalBrand portal={`${user.role.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase())} Portal`} />
         </div>
         
-        <nav style={{ padding: '1rem', flex: 1, overflowY: 'auto' }}>
+        <nav aria-label={`${user.role} navigation`} style={{ padding: '1rem', flex: 1, overflowY: 'auto' }}>
           {menuStructure.map((section, idx) => (
             <div key={idx} style={{ marginBottom: '1.5rem' }}>
               <h3 style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.5rem', letterSpacing: '0.05em', paddingLeft: '0.5rem' }}>
@@ -937,7 +923,9 @@ const AdminDashboard = () => {
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {section.items.map(item => (
                   <li key={item.id}>
-                    <button 
+                    <button
+                      type="button"
+                      aria-current={activeSubMenu === item.id ? 'page' : undefined}
                       onClick={() => handleSidebarClick(section.category, item.id)}
                       style={{ 
                         width: '100%', textAlign: 'left', padding: '0.5rem 1rem', borderRadius: '6px',
@@ -949,7 +937,10 @@ const AdminDashboard = () => {
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                       }}
                     >
-                      <span>{item.label}</span>
+                      <span className="admin-nav-button-content">
+                        {React.createElement(MENU_ICONS[item.id] || FileText, { size: 17, 'aria-hidden': true })}
+                        <span>{item.label}</span>
+                      </span>
                       {item.badge && (
                         <span style={{
                           display: 'inline-block', width: '8px', height: '8px',
@@ -964,6 +955,10 @@ const AdminDashboard = () => {
             </div>
           ))}
         </nav>
+        <div className="app-sidebar-user">
+          <span className="app-sidebar-avatar">{(user.name || 'U').slice(0, 1).toUpperCase()}</span>
+          <span><strong>{user.name}</strong><small>{user.role.replaceAll('_', ' ')}</small></span>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -1004,7 +999,7 @@ const AdminDashboard = () => {
           {(!eventGridSubMenus.includes(activeSubMenu) && !['events_create', 'account_signout', 'admin_analytics', 'club_profile', 'admin_clubs_all', 'admin_clubs_add', 'clubs_manage', 'admin_clubs_browse', 'admin_users_students', 'admin_req_faculty', 'admin_req_student', 'coordinator_students', 'admin_club_approvals'].includes(activeSubMenu) && activeMenu !== 'Reports') && (
             <div style={{ padding: '4rem', textAlign: 'center', background: 'rgba(255,255,255,0.8)', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
               <h2 style={{ color: 'var(--primary)', marginBottom: '1rem', fontSize: '1.5rem' }}>✨ Coming Soon</h2>
-              <p style={{ color: '#64748b' }}>The "{menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label}" module is currently under development.</p>
+              <p style={{ color: '#64748b' }}>The &quot;{menuStructure.flatMap(s => s.items).find(i => i.id === activeSubMenu)?.label}&quot; module is currently under development.</p>
               <button onClick={() => handleSidebarClick('Events', 'events_all')} className="btn-primary" style={{ marginTop: '1.5rem' }}>Return to All Events</button>
             </div>
           )}
@@ -1152,376 +1147,473 @@ const AdminDashboard = () => {
           </div>
         )}
         
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '3rem' }}>Loading operations...</div>
+          {loading ? (
+          <LoadingState label="Loading event operations…" />
         ) : eventGridSubMenus.includes(activeSubMenu) && (
           <div className={`admin-event-list-grid${completedEventsView ? ' completed-events-grid' : ''}`} style={{ display: 'grid', gridTemplateColumns: completedEventsView ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(400px, 1fr))', gap: completedEventsView ? '1.25rem' : '2rem' }}>
             {getFilteredEvents().length === 0 ? (
-              <p style={{ color: '#64748b' }}>No events found for this filter.</p>
+              <EmptyState icon={CalendarDays} title="No events in this view" description="Events matching this workflow will appear here." />
             ) : (
               getFilteredEvents().map(event => completedEventsView && event.state === 'completed' ? renderCompletedEventCard(event) : (
-                <div key={event.id} className="glass-card admin-event-card" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-                
-                {['admin', 'coordinator', 'mentor'].includes(user.role) && (
-                  <button 
-                    onClick={() => handleDeleteEvent(event.id)} 
-                    style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
-                    title="Delete Program"
-                  >
-                    Delete
-                  </button>
-                )}
-
-                <div style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', paddingRight: '4rem' }}>
-                  <span className="badge badge-secondary" style={{ alignSelf: 'flex-start', marginBottom: '0.5rem', fontSize: '0.8rem', background: '#f1f5f9', color: 'var(--primary)' }}>
-                    📅 {new Date(event.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </span>
-                  <h3 style={{ fontSize: '1.5rem', margin: 0 }}>{event.title}</h3>
-                </div>
-                
-                {event.rejection_reason && (
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#b91c1c', fontWeight: 'bold' }}>⚠️ Notes from Admin/Finance:</p>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#b91c1c' }}>{event.rejection_reason}</p>
+                <div key={event.id} className="event-detail-card admin-event-card">
+                  {/* TOP HEADER ROW */}
+                  <div className="event-header-row">
+                    <div className="event-header-left">
+                      <div className="event-title-line">
+                        <h3>{event.title}</h3>
+                        <span className={`event-status-badge ${event.state === 'published' || event.state === 'completed' ? 'published' : ''}`}>
+                          <span style={{ width: 8, height: 8, borderRadius: '50%', background: event.state === 'published' ? '#22c55e' : 'currentColor', display: 'inline-block' }} />
+                          {event.state === 'pending_admin_initial' || event.state === 'pending_finance' ? 'Pending Finance Approval' :
+                           event.state === 'pending_admin_final' ? 'Finance Approved (Coordinator to Publish)' :
+                           event.state === 'pending_coordinator_publish' ? 'Approved (Ready to Publish)' :
+                           event.state === 'published' ? 'Published' :
+                           event.state === 'pending_completion' ? 'Pending Completion' :
+                           event.state === 'completed' ? 'Completed' : 
+                           event.state}
+                        </span>
+                      </div>
+                      <div className="event-meta-line">
+                        <span className="event-meta-item">
+                          <CalendarDays size={16} /> 
+                          {new Date(event.date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          {event.end_date ? ` – ${new Date(event.end_date).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
+                        </span>
+                        <div className="event-meta-divider" />
+                        <span className="event-meta-item">
+                          <MapPin size={16} /> {event.location || 'Not specified'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="event-header-actions">
+                      {(user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events) && (
+                        <button className="edit-btn" onClick={() => handleEditClick(event)} title="Edit Event">
+                          <Pencil size={16} /> Edit
+                        </button>
+                      )}
+                      {['admin', 'coordinator', 'mentor'].includes(user.role) && (
+                        <button className="danger-btn" onClick={() => handleDeleteEvent(event.id)} title="Delete Event">
+                          <Trash2 size={16} /> Delete
+                        </button>
+                      )}
+                      <button title="More options"><MoreVertical size={16} /></button>
+                    </div>
                   </div>
-                )}
-                
-                <span style={{ alignSelf: 'flex-start', marginBottom: '1rem' }} className={`badge ${['completed', 'published'].includes(event.state) ? 'badge-success' : 'badge-warning'}`}>
-                  {event.state === 'pending_admin_initial' || event.state === 'pending_finance' ? 'Pending Finance Approval' :
-                   event.state === 'pending_admin_final' ? 'Finance Approved (Coordinator to Publish)' :
-                   event.state === 'pending_coordinator_publish' ? 'Approved (Ready to Publish)' :
-                   event.state === 'published' ? 'Approved & Published' :
-                   event.state === 'pending_completion' ? 'Pending Completion' :
-                   event.state === 'completed' ? 'Completed' : 
-                   event.state}
-                </span>
 
-                {true && (
-                  <section style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', marginBottom: '1rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                      <strong style={{ color: '#0f172a' }}>{getEventTimelineStatus(event)}</strong>
-                      <span style={{ color: '#475569', fontSize: '0.875rem' }}>{event.club_name || 'University'} · {event.club_completed_events_count || 0} completed event(s) hosted</span>
+                  {event.rejection_reason && (
+                    <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '0.75rem', borderRadius: '6px' }}>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: '#b91c1c', fontWeight: 'bold' }}>⚠️ Notes from Admin/Finance:</p>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: '#b91c1c' }}>{event.rejection_reason}</p>
                     </div>
-                    <p style={{ margin: '0 0 0.5rem', color: '#334155' }}><strong>When:</strong> {new Date(event.date).toLocaleString()}{event.end_date ? ` – ${new Date(event.end_date).toLocaleString()}` : ''}</p>
-                    <p style={{ margin: '0 0 0.5rem', color: '#334155' }}><strong>Where:</strong> {event.location || 'Not specified'}</p>
-                    <p style={{ margin: '0 0 0.75rem', color: '#334155', whiteSpace: 'pre-wrap' }}><strong>About:</strong> {event.description || 'No description provided.'}</p>
-                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', color: '#334155', fontSize: '0.9rem' }}>
-                      <span><strong>Registered:</strong> {event.registered_count || 0} / {event.capacity || '—'}</span>
-                      <span><strong>Checked in:</strong> {event.attended_count || 0}</span>
-                      <span><strong>Feedback:</strong> {event.feedback_count || 0} ({event.positive_feedback_count || 0} positive)</span>
+                  )}
+
+                  {/* METRICS ROW */}
+                  <div className="event-metrics-row">
+                    <div className="event-metric-card">
+                      <div className="event-metric-icon blue"><Users size={24} /></div>
+                      <div className="event-metric-info">
+                        <small>Registered</small>
+                        <strong>{event.registered_count || 0} <span>/ {event.capacity || '—'}</span></strong>
+                      </div>
                     </div>
-                    <div style={{ marginTop: '0.75rem', color: '#334155', fontSize: '0.9rem' }}>
-                      <strong>Event Organization:</strong>
-                      <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>
-                        <li><strong>Department:</strong> {event.department || 'University Wide'}</li>
-                        <li><strong>Dept Coordinator:</strong> {event.dept_coordinator_name || 'None Assigned'}</li>
-                        <li><strong>Club Name:</strong> {event.club_name || 'N/A'}</li>
-                      </ul>
+                    <div className="event-metric-card">
+                      <div className="event-metric-icon green"><UserCheck size={24} /></div>
+                      <div className="event-metric-info">
+                        <small>Checked in</small>
+                        <strong>{event.attended_count || 0}</strong>
+                      </div>
                     </div>
-                    <div style={{ marginTop: '0.75rem', color: '#334155', fontSize: '0.9rem' }}>
-                      <strong>Club event team:</strong>
-                      {event.organizers?.length ? (
-                        <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>
-                          {event.organizers.map((organizer, index) => (
-                            <li key={`${organizer.role}-${organizer.name}-${index}`}>
-                              {organizer.name} ({organizer.role.replaceAll('_', ' ')})
-                            </li>
-                          ))}
-                        </ul>
-                      ) : <span> No club coordinator, president, head, or core member is assigned.</span>}
+                    <div className="event-metric-card">
+                      <div className="event-metric-icon purple"><MessageSquare size={24} /></div>
+                      <div className="event-metric-info">
+                        <small>Feedback</small>
+                        <strong>{event.feedback_count || 0}</strong>
+                        {event.feedback_count > 0 && (
+                          <a href="#" onClick={(e) => { e.preventDefault(); handleViewFeedback(event.id); }} style={{ fontSize: '0.75rem', color: '#8b5cf6', textDecoration: 'none' }}>View Analysis</a>
+                        )}
+                      </div>
                     </div>
-                  </section>
-                )}
-                
-                {/* ADMIN UI (Event Completion Flow) */}
-                {user.role === 'admin' && (
-                  <div style={{ marginTop: 'auto' }}>
-                    {false && event.state === 'pending_admin_initial' && (
-                      <>
-                        <button onClick={() => handleApproveAdminInitial(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
-                          ✅ Send Budget to Finance
-                        </button>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => handleRequestChanges(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fffbeb', color: '#d97706', borderColor: '#d97706' }}>
-                            ⚠️ Request Changes
-                          </button>
-                          <button onClick={() => handleRejectEvent(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fee2e2', color: '#dc2626', borderColor: '#dc2626' }}>
-                            ❌ Reject
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {false && event.state === 'pending_admin_final' && (
-                      <>
-                        <button onClick={() => handleApproveAdminFinal(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#3b82f6' }}>
-                          ✅ Send Final Approval to Coordinator
-                        </button>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => handleRequestChanges(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fffbeb', color: '#d97706', borderColor: '#d97706' }}>
-                            ⚠️ Request Changes
-                          </button>
-                          <button onClick={() => handleRejectEvent(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fee2e2', color: '#dc2626', borderColor: '#dc2626' }}>
-                            ❌ Reject
-                          </button>
-                        </div>
-                      </>
-                    )}
-                    {event.state === 'pending_completion' && (
-                      <button onClick={() => handleApproveCompletion(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#10b981' }}>
-                        ✅ Approve Final Completion (Mark Completed)
-                      </button>
-                    )}
+                    <div className="event-metric-card">
+                      <div className="event-metric-icon teal"><ThumbsUp size={24} /></div>
+                      <div className="event-metric-info">
+                        <small>Positive feedback</small>
+                        <strong>{event.positive_feedback_count || 0}</strong>
+                      </div>
+                    </div>
                   </div>
-                )}
 
-                {/* FINANCE ROLE SPECIFIC UI */}
-                {user.role === 'finance' && (
-                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#047857' }}>💰 Financial Status & Estimations</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                      <span>Allocated Budget: ₹{(event.budget || 0).toLocaleString()}</span>
-                      <span>Est. Expenses: ₹{(event.registered_count * 200).toLocaleString()}</span>
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: '#065f46', marginTop: '0.5rem', marginBottom: '0.75rem' }}>
-                      {event.accessories_req && <div style={{ marginBottom: '0.25rem' }}><strong>Accessories:</strong> {event.accessories_req}</div>}
-                      {event.guests_req && <div style={{ marginBottom: '0.25rem' }}><strong>Guests:</strong> {event.guests_req}</div>}
-                      {event.gifts_req && <div style={{ marginBottom: '0.25rem' }}><strong>Gifts:</strong> {event.gifts_req}</div>}
-                      {event.prizes_req && <div style={{ marginBottom: '0.25rem' }}><strong>Prizes:</strong> {event.prizes_req}</div>}
-                    </div>
-                    {/* FINANCE APPROVAL UI */}
-                    {user.role === 'finance' && event.state === 'pending_finance' && (
-                      <>
-                        <button onClick={() => handleApproveBudget(event.id)} className="btn-primary" style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none', marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                          💰 Approve Budget (Send to Coordinator)
-                        </button>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => handleRequestChanges(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fffbeb', color: '#d97706', borderColor: '#d97706' }}>
-                            ⚠️ Request Changes
-                          </button>
-                          <button onClick={() => handleRejectEvent(event.id)} className="btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', background: '#fee2e2', color: '#dc2626', borderColor: '#dc2626' }}>
-                            ❌ Reject
-                          </button>
+                  {/* BOTTOM SPLIT LAYOUT */}
+                  <div className="event-split-layout">
+                    {/* LEFT COLUMN: Details */}
+                    <div className="event-details-col">
+                      <div>
+                        <div className="event-section-title"><FileText size={20} /> Event details</div>
+                        <h4 style={{ fontSize: '0.9rem', color: '#0f172a', marginBottom: '0.5rem' }}>About</h4>
+                        <p className="event-about-text">{event.description || 'No description provided.'}</p>
+                      </div>
+
+                      <div>
+                        <div className="event-section-title" style={{ marginTop: '0.5rem' }}><Building2 size={20} /> Event organization</div>
+                        <div className="event-org-list">
+                          <div className="event-org-item">
+                            <CalendarDays size={18} />
+                            <span className="label">Department</span>
+                            <span className="value">{event.department || 'University Wide'}</span>
+                          </div>
+                          <div className="event-org-item">
+                            <User size={18} />
+                            <span className="label">Department coordinator</span>
+                            <span className="value">{event.dept_coordinator_name || 'None Assigned'}</span>
+                          </div>
+                          <div className="event-org-item">
+                            <Lock size={18} />
+                            <span className="label">Club name</span>
+                            <span className="value">{event.club_name || 'N/A'}</span>
+                          </div>
                         </div>
-                      </>
-                    )}
-                    {user.role === 'finance' && ['finance_review', 'completed'].includes(event.state) && (
-                      <>
-                        <div style={{ background: '#f0fdf4', border: '1px solid #86efac', padding: '0.5rem', borderRadius: '6px', marginTop: '0.5rem', marginBottom: '0.5rem', color: '#166534', fontSize: '0.85rem' }}>
-                          <strong>Submitted Actual Expenses:</strong> ₹{event.actual_expenses?.toLocaleString()}
-                          {event.expenses_file_url && (
-                            <div style={{ marginTop: '0.5rem' }}>
-                              <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer" style={{ color: '#047857', textDecoration: 'underline' }}>
-                                📄 Download Expense CSV Report
+                      </div>
+
+                      <div>
+                        <div className="event-section-title" style={{ marginTop: '0.5rem' }}><Users size={20} /> Club event team</div>
+                        {event.organizers?.length ? (
+                          <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem', color: '#475569', fontSize: '0.9rem' }}>
+                            {event.organizers.map((organizer, index) => (
+                              <li key={`${organizer.role}-${organizer.name}-${index}`}>
+                                {organizer.name} ({organizer.role.replaceAll('_', ' ')})
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <div className="event-team-box warning">
+                            <Info size={18} /> No club coordinator, president, head, or core member is assigned.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: Operations */}
+                    <div className="event-ops-col">
+                      
+                      {user.role !== 'admin' && user.role !== 'finance' && (
+                        <>
+                          <div className="event-section-title"><Settings size={20} /> Event operations</div>
+
+
+                      {/* PUBLISH ACTION */}
+                      {(user.role.includes('coordinator') || user.permissions?.permissions?.events?.manage_events) && event.state === 'pending_coordinator_publish' && (
+                        <div className="event-op-step">
+                          <div className="event-op-number" style={{ background: '#dcfce7', color: '#16a34a' }}><Sparkles size={16} /></div>
+                          <div className="event-op-content">
+                            <div className="event-op-header">
+                              <h4>Publish Event</h4>
+                              <p>Event is approved by finance and ready.</p>
+                            </div>
+                            <div className="event-op-actions" style={{ gridTemplateColumns: '1fr' }}>
+                              <button onClick={() => handlePublishEvent(event.id)} className="event-op-btn primary" style={{ background: '#10b981' }}>
+                                📢 Publish Event to Students
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STEP 1: Expense Report */}
+                      {event.state === 'published' && !activeSubMenu.startsWith('admin_') && (
+                        <div className="event-op-step">
+                          <div className="event-op-number">1</div>
+                          <div className="event-op-content">
+                            <div className="event-op-header">
+                              <div>
+                                <h4>Expense report (Required)</h4>
+                                <p>Upload expense CSV for Finance.</p>
+                              </div>
+                              <a href={`${baseURL}/api/admin/events/csv/template/expenses`} target="_blank" rel="noreferrer">
+                                <Download size={14} /> Download Template
                               </a>
+                            </div>
+                            
+                            <div className="event-op-file-input">
+                              <label htmlFor={`expense-upload-${event.id}`}>
+                                <Paperclip size={16} /> Choose File
+                              </label>
+                              <span>{event.expenses_file_url ? 'expense_report.csv' : 'No file chosen'}</span>
+                              <input 
+                                id={`expense-upload-${event.id}`}
+                                type="file" 
+                                accept=".csv"
+                                onChange={(e) => handleUploadExpenses(event.id, e.target.files[0])}
+                              />
+                            </div>
+                            {event.expenses_file_url && <small style={{ color: '#047857', marginTop: '0.25rem', display: 'block' }}>Total (INR): {Number(event.actual_expenses || 0).toLocaleString()}</small>}
+
+                            <div className="event-op-actions" style={{ gridTemplateColumns: '1fr' }}>
+                              <button 
+                                onClick={() => handleCloseEvent(event)} 
+                                disabled={!event.expenses_file_url || event.actual_expenses == null} 
+                                className={`event-op-btn ${event.expenses_file_url ? 'primary' : 'disabled'}`}
+                              >
+                                {event.expenses_file_url ? 'Submit CSV to Finance' : 'Upload Expense CSV to Continue'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STEP 2: Attendance */}
+                      {['published', 'pending_completion', 'completed'].includes(event.state) && (canScan() || canViewRegistrationList()) && (
+                        <div className="event-op-step">
+                          <div className="event-op-number">2</div>
+                          <div className="event-op-content">
+                            <div className="event-op-header">
+                              <div>
+                                <h4>Attendance</h4>
+                                <p>Use QR code scanning for check-in and download attendance records.</p>
+                              </div>
+                            </div>
+                            <div className="event-op-actions">
+                              {event.state === 'published' && canScan() && (
+                                <button onClick={() => startScanner(event.id)} className="event-op-btn primary">
+                                  <QrCode size={18} /> Scan QRs (Check-in)
+                                </button>
+                              )}
+                              {canViewRegistrationList() && (
+                                <button onClick={() => handleExportRegistrations(event.id)} className="event-op-btn secondary">
+                                  <FileText size={18} /> Download Attendance CSV
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* STEP 3: Final Results */}
+                      {['published', 'finance_review', 'pending_completion', 'completed'].includes(event.state) && canUploadCSV() && !activeSubMenu.startsWith('admin_') && (
+                        <div className="event-op-step">
+                          <div className="event-op-number">3</div>
+                          <div className="event-op-content">
+                            <div className="event-op-header">
+                              <div>
+                                <h4>Final results</h4>
+                                <p>Upload final results CSV for certificates.</p>
+                              </div>
+                              <a href={`${baseURL}/api/admin/events/csv/template/attendance`} target="_blank" rel="noreferrer">
+                                <Download size={14} /> Download Template
+                              </a>
+                            </div>
+                            <div className="event-op-file-input">
+                              <label htmlFor={`results-upload-${event.id}`}>
+                                <Paperclip size={16} /> Choose File
+                              </label>
+                              <span>{event.attendance_file_url ? 'final_results.csv' : 'No file chosen'}</span>
+                              <input 
+                                id={`results-upload-${event.id}`}
+                                type="file" 
+                                accept=".csv"
+                                onChange={(e) => handleUploadAttendance(event.id, e.target.files[0])}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      
+                        </>
+                      )}
+                      
+                      {/* STEP 4: Certificate Generation */}
+                      {canManageCerts() && event.state === 'completed' && (
+                        <div className="event-op-step">
+                          <div className="event-op-number">4</div>
+                          <div className="event-op-content">
+                            <div className="event-op-header">
+                              <div>
+                                <h4>Certificate Generation</h4>
+                                <p>Upload or generate an AI template for certificates.</p>
+                              </div>
+                            </div>
+                            
+                            <div className="event-op-file-input" style={{ marginBottom: '0.75rem' }}>
+                              <label htmlFor={`cert-upload-${event.id}`}>
+                                <Paperclip size={16} /> Upload Manual (PNG/JPG)
+                              </label>
+                              <span>{event.certificate_template_url ? 'template_active.png' : 'No file chosen'}</span>
+                              <input 
+                                id={`cert-upload-${event.id}`}
+                                type="file" 
+                                accept=".png,.jpg,.jpeg"
+                                onChange={async (e) => {
+                                  if (!e.target.files[0]) return;
+                                  const formData = new FormData();
+                                  formData.append("file", e.target.files[0]);
+                                  try {
+                                    await axios.post(`${baseURL}/api/admin/events/${event.id}/upload-certificate-template`, formData);
+                                    notify("Custom template uploaded successfully!");
+                                    fetchAdminData();
+                                  } catch (err) {
+                                    notify(`Error: ${err.response?.data?.detail || 'Failed to upload template'}`);
+                                  }
+                                }}
+                              />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                              <input 
+                                type="text" 
+                                className="input-glass" 
+                                placeholder="Generate AI Template (e.g. Dark red colors...)" 
+                                value={aiPrompts[event.id] || ''}
+                                onChange={(e) => setAiPrompts({...aiPrompts, [event.id]: e.target.value})}
+                                disabled={aiLoading[event.id]}
+                                style={{ height: '42px', flex: 1 }}
+                              />
+                              <button 
+                                onClick={() => handleGenerateAITemplate(event.id)} 
+                                className="event-op-btn secondary"
+                                disabled={aiLoading[event.id]}
+                                style={{ background: '#f8fafc', color: '#0f172a', borderColor: '#e2e8f0' }}
+                              >
+                                {aiLoading[event.id] ? '⏳...' : 'Generate AI'}
+                              </button>
+                            </div>
+                            
+                            {event.certificate_template_url && (
+                              <img src={`${baseURL}${event.certificate_template_url}`} alt="Template" style={{ maxWidth: '100%', maxHeight: '120px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '0.75rem', objectFit: 'contain' }} />
+                            )}
+
+                            <div className="event-op-actions" style={{ gridTemplateColumns: '1fr' }}>
+                              <button onClick={() => generateCertificates(event.id)} className="event-op-btn primary" style={{ background: '#10b981' }}>
+                                ⚡ Publish Certificates
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ADMIN / FINANCE UI */}
+                      {user.role === 'admin' && (
+                        <div style={{ padding: '1rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: 'auto' }}>
+                          <h4 style={{ color: '#0f172a', fontSize: '0.9rem', marginBottom: '0.5rem' }}>🛡️ Admin Actions</h4>
+                          
+                          {(event.expenses_file_url || event.attendance_file_url) && (
+                            <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #e2e8f0' }}>
+                               {event.expenses_file_url && (
+                                  <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer" className="event-op-btn secondary" style={{ display: 'block', marginBottom: '0.5rem', textAlign: 'center' }}>
+                                    📥 Download Expense CSV
+                                  </a>
+                               )}
+                               {event.attendance_file_url && (
+                                  <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="event-op-btn secondary" style={{ display: 'block', textAlign: 'center' }}>
+                                    📥 Download Final Results CSV
+                                  </a>
+                               )}
+                            </div>
+                          )}
+                          {event.state === 'pending_admin_initial' && (
+                            <button onClick={() => handleApproveAdminInitial(event.id)} className="event-op-btn primary" style={{ width: '100%', marginBottom: '0.5rem' }}>✅ Send Budget to Finance</button>
+                          )}
+                          {event.state === 'pending_admin_final' && (
+                            <button onClick={() => handleApproveAdminFinal(event.id)} className="event-op-btn primary" style={{ width: '100%', marginBottom: '0.5rem' }}>✅ Send Final Approval</button>
+                          )}
+                          {event.state === 'pending_completion' && (
+                            <button onClick={() => handleApproveCompletion(event.id)} className="event-op-btn primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#8b5cf6' }}>✅ Approve Final Completion</button>
+                          )}
+                          {['pending_admin_initial', 'pending_admin_final'].includes(event.state) && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                              <button onClick={() => handleRequestChanges(event.id)} className="event-op-btn" style={{ background: '#fffbeb', color: '#d97706', border: '1px solid #fef08a' }}>⚠️ Revise</button>
+                              <button onClick={() => handleRejectEvent(event.id)} className="event-op-btn" style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>❌ Reject</button>
                             </div>
                           )}
                         </div>
-                        {event.state === 'finance_review' && (
-                          <button onClick={() => handleVerifyExpenses(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981', color: 'white', border: 'none', marginBottom: '0.5rem' }}>
-                            ✅ Verify Expenses & Mark Event Completed
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
+                      )}
 
-                {/* GENERAL ANALYTICS (All Roles) */}
-                {user.role !== 'finance' && (
-                  <div style={{ background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-                    <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--secondary)' }}>Performance Analytics</p>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                      <span>👥 Registrations: {event.registered_count} / {event.capacity}</span>
-                      <span>📈 Feedback: {event.feedback_count}</span>
+                      {user.role === 'finance' && (
+                        <div style={{ padding: '1rem', background: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0', marginTop: 'auto' }}>
+                          <h4 style={{ color: '#166534', fontSize: '0.9rem', marginBottom: '0.5rem' }}>💰 Finance Actions</h4>
+                          <div style={{ fontSize: '0.85rem', color: '#166534', marginBottom: '0.75rem' }}>
+                            <div>Budget: ₹{(event.budget || 0).toLocaleString()}</div>
+                            <div>Est. Expenses: ₹{(event.registered_count * 200).toLocaleString()}</div>
+                          </div>
+                          
+                          {event.state === 'pending_finance' && (
+                            <button onClick={() => handleApproveBudget(event.id)} className="event-op-btn primary" style={{ width: '100%', background: '#f59e0b', marginBottom: '0.5rem' }}>💰 Approve Budget</button>
+                          )}
+                          {event.state === 'finance_review' && (
+                            <button onClick={() => handleVerifyExpenses(event.id)} className="event-op-btn primary" style={{ width: '100%', background: '#10b981', marginBottom: '0.5rem' }}>✅ Verify Expenses</button>
+                          )}
+                          {['finance_review', 'completed'].includes(event.state) && event.expenses_file_url && (
+                             <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer" style={{ color: '#047857', fontSize: '0.8rem', textDecoration: 'underline', display: 'block', marginBottom: '0.5rem' }}>📄 Download Expense CSV (₹{event.actual_expenses?.toLocaleString()})</a>
+                          )}
+                          {event.state === 'pending_finance' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+                              <button onClick={() => handleRequestChanges(event.id)} className="event-op-btn" style={{ background: '#fffbeb', color: '#d97706', border: '1px solid #fef08a' }}>⚠️ Revise</button>
+                              <button onClick={() => handleRejectEvent(event.id)} className="event-op-btn" style={{ background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>❌ Reject</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                     </div>
-                    {event.feedback_count > 0 && (
-                      <button onClick={() => handleViewFeedback(event.id)} className="btn-secondary" style={{ width: '100%', fontSize: '0.8rem', padding: '0.25rem' }}>
-                        🔍 View AI Feedback Analysis
-                      </button>
-                    )}
                   </div>
-                )}
-
-                <div style={{ marginTop: 'auto' }}>
-                  {/* ADMIN UI */}
-                  {user.role === 'admin' && (
-                    <>
-                      {/* Admin Completion Approval */}
-                      {event.state === 'pending_completion' && (
-                        <button onClick={() => handleApproveCompletion(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#8b5cf6' }}>
-                          ✅ Approve Event Completion
-                        </button>
-                      )}
-                      
-                      {/* Review Uploaded CSV */}
-                      {['pending_completion', 'completed'].includes(event.state) && event.attendance_file_url && (
-                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem' }}>
-                          <a href={`${baseURL}${event.attendance_file_url}`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ width: '100%', display: 'block', textAlign: 'center', textDecoration: 'none', color: '#047857', borderColor: '#047857' }}>
-                            📥 Review Uploaded Results (CSV)
-                          </a>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {/* Coordinator Certificate Generation & Template Upload */}
-                  {canManageCerts() && event.state === 'completed' && (
-                    <div style={{ marginTop: '0.5rem', background: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '8px' }}>
-                      <p style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#10b981', fontSize: '0.9rem' }}>🎓 Certificate Management</p>
-                      
-                      <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>🖼️ 1) Manual Upload (PNG/JPG):</label>
-                        <input 
-                          type="file" 
-                          accept=".png,.jpg,.jpeg"
-                          onChange={async (e) => {
-                            if (!e.target.files[0]) return;
-                            const formData = new FormData();
-                            formData.append("file", e.target.files[0]);
-                            try {
-                              await axios.post(`${baseURL}/api/admin/events/${event.id}/upload-certificate-template`, formData);
-                              alert("Custom template uploaded successfully!");
-                              fetchAdminData();
-                            } catch (err) {
-                              alert(`Error: ${err.response?.data?.detail || 'Failed to upload template'}`);
-                            }
-                          }}
-                          className="input-glass"
-                          style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
-                        />
-                      </div>
-                      
-                      <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>✨ OR 2) Generate Template with Free AI:</label>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <input 
-                            type="text" 
-                            className="input-glass" 
-                            placeholder="e.g. Dark red and gold colors..." 
-                            value={aiPrompts[event.id] || ''}
-                            onChange={(e) => setAiPrompts({...aiPrompts, [event.id]: e.target.value})}
-                            style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem' }}
-                            disabled={aiLoading[event.id]}
-                          />
-                          <button 
-                            onClick={() => handleGenerateAITemplate(event.id)} 
-                            className="btn-primary" 
-                            style={{ background: '#3b82f6', padding: '0.5rem 1rem', fontSize: '0.8rem' }}
-                            disabled={aiLoading[event.id]}
-                          >
-                            {aiLoading[event.id] ? '⏳ Generating...' : 'Generate AI'}
-                          </button>
-                        </div>
-                        {aiLoading[event.id] && <p style={{ fontSize: '0.75rem', color: '#3b82f6', marginTop: '0.25rem' }}>This might take 15-30 seconds. Please wait...</p>}
-                      </div>
-                      
-                      <div style={{ marginBottom: '1rem' }}>
-                        {event.certificate_template_url && (
-                          <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.8)', borderRadius: '8px', textAlign: 'center' }}>
-                            <div style={{ fontSize: '0.8rem', color: '#10b981', marginBottom: '0.5rem', fontWeight: 'bold' }}>✓ Custom Template Active</div>
-                            <img src={`${baseURL}${event.certificate_template_url}`} alt="Certificate Template Preview" style={{ maxWidth: '100%', maxHeight: '150px', border: '1px solid #ccc', borderRadius: '4px' }} />
-                          </div>
-                        )}
-                      </div>
-
-                      <button onClick={() => generateCertificates(event.id)} className="btn-primary" style={{ width: '100%', background: '#10b981' }}>
-                        ⚡ Generate & Publish Certificates to Students
-                      </button>
-                    </div>
-                  )}
-
-                  {/* COORDINATOR UI */}
-                  {(event.can_manage !== false && (user.role === 'coordinator' || canScan() || canUploadCSV())) ? (
-                    <>
-                      {/* Manage Events (Edit) & Delete Events */}
-                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                        {(user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events) && (
-                          <button onClick={() => handleEditClick(event)} className="btn-secondary" style={{ flex: 1, padding: '0.25rem', fontSize: '0.8rem' }}>
-                            ✏️ Edit
-                          </button>
-                        )}
-                        {(user.role === 'coordinator' || user.permissions?.permissions?.events?.delete_events) && (
-                          <button onClick={() => handleDeleteEvent(event.id)} className="btn-secondary" style={{ flex: 1, background: '#ef4444', padding: '0.25rem', fontSize: '0.8rem' }}>
-                            🗑️ Delete
-                          </button>
-                        )}
-                      </div>
-                      
-                      {(user.role === 'coordinator' || user.permissions?.permissions?.events?.manage_events) && event.state === 'pending_coordinator_publish' && (
-                        <button onClick={() => handlePublishEvent(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', background: '#10b981' }}>
-                          📢 Publish Event to Students
-                        </button>
-                      )}
-
-                      {/* Upload Expense CSV (Coordinator) */}
-                      {event.state === 'published' && (
-                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>Upload Expense CSV for Finance (Required):</label>
-                            <a href={`${baseURL}/api/admin/events/csv/template/expenses`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}>Download Template</a>
-                          </div>
-                          <input 
-                            type="file" 
-                            accept=".csv"
-                            onChange={(e) => handleUploadExpenses(event.id, e.target.files[0])}
-                            className="input-glass"
-                            style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
-                          />
-                          {event.expenses_file_url && <small style={{ display: 'block', marginTop: '0.35rem', color: '#047857' }}>Expense CSV uploaded - Total (INR): {Number(event.actual_expenses || 0).toLocaleString()}</small>}
-                        </div>
-                      )}
-
-                      {event.state === 'finance_review' && event.expenses_file_url && (
-                        <a href={`${baseURL}${event.expenses_file_url}`} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: '0.5rem', color: '#047857', fontSize: '0.85rem' }}>
-                          View submitted expense CSV - Total (INR): {Number(event.actual_expenses || 0).toLocaleString()}
-                        </a>
-                      )}
-
-                      {event.state === 'published' && (
-                        <button onClick={() => handleCloseEvent(event)} disabled={!event.expenses_file_url || event.actual_expenses == null} title={!event.expenses_file_url || event.actual_expenses == null ? 'Upload a valid expense CSV first' : undefined} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: event.expenses_file_url && event.actual_expenses != null ? '#dc2626' : '#64748b', borderColor: event.expenses_file_url && event.actual_expenses != null ? '#dc2626' : '#cbd5e1', opacity: event.expenses_file_url && event.actual_expenses != null ? 1 : 0.6, cursor: event.expenses_file_url && event.actual_expenses != null ? 'pointer' : 'not-allowed' }}>
-                          {event.expenses_file_url && event.actual_expenses != null ? 'Submit CSV & Close (Send to Finance)' : 'Upload Expense CSV to Continue'}
-                        </button>
-                      )}
-
-                      {event.state === 'published' && canScan() && (
-                        <button onClick={() => startScanner(event.id)} className="btn-primary" style={{ width: '100%', marginBottom: '0.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem' }}>
-                          <QrCode size={18} /> Scan QRs (Check-in)
-                        </button>
-                      )}
-                      {/* Export Attendance Button */}
-                      {['published', 'pending_completion', 'completed'].includes(event.state) && canViewRegistrationList() && (
-                        <button onClick={() => handleExportRegistrations(event.id)} className="btn-secondary" style={{ width: '100%', marginBottom: '0.5rem', color: '#047857', borderColor: '#047857' }}>
-                          📊 Download Attendance CSV
-                        </button>
-                      )}
-
-                      {/* Upload Attendance File */}
-                      {['published', 'finance_review', 'pending_completion', 'completed'].includes(event.state) && canUploadCSV() && (
-                        <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.5)', borderRadius: '8px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
-                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>🏆 Upload Final Results (CSV for Certificates):</label>
-                            <a href={`${baseURL}/api/admin/events/csv/template/attendance`} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'underline' }}>Download Template</a>
-                          </div>
-                          <input 
-                            type="file" 
-                            accept=".csv"
-                            onChange={(e) => handleUploadAttendance(event.id, e.target.files[0])}
-                            className="input-glass"
-                            style={{ padding: '0.5rem', fontSize: '0.8rem', width: '100%' }}
-                          />
-                        </div>
-                      )}
-
-                    </>
-                  ) : null}
                 </div>
-              </div>
             ))
             )}
           </div>
         )}
       </div>
       )}
+      
+          {['coordinator_club_reqs', 'admin_club_reqs'].includes(activeSubMenu) && (
+            <div className="animate-fade-in" style={{ padding: '1rem', background: 'white', borderRadius: '8px' }}>
+              <h2 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>
+                {activeSubMenu === 'admin_club_reqs' ? 'Pending Admin Approvals' : 'Pending Department Requests'}
+              </h2>
+              {clubJoinRequests.length === 0 ? (
+                <p>No pending requests.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {clubJoinRequests.map(req => (
+                    <div key={req.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                      <div>
+                        <strong>{req.user_name}</strong> ({req.user_email}) <br />
+                        <span style={{ fontSize: '0.85rem', color: 'gray' }}>Department: {req.user_department || 'N/A'}</span> <br />
+                        <span style={{ fontSize: '0.85rem', color: 'gray' }}>Club: {req.club_name}</span> <br />
+                        <span style={{ fontSize: '0.85rem', color: 'gray' }}>Message: {req.message || 'No message'}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {activeSubMenu === 'admin_club_reqs' ? (
+                          <>
+                            <button onClick={async () => {
+                              await axios.post(`${baseURL}/api/clubs/requests/${req.id}/approve`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+                              notify('Request approved!');
+                              fetchClubJoinRequests();
+                            }} className="btn-primary" style={{ background: '#10b981' }}>Approve</button>
+                            <button onClick={async () => {
+                              await axios.post(`${baseURL}/api/clubs/requests/${req.id}/reject`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+                              notify('Request rejected!');
+                              fetchClubJoinRequests();
+                            }} className="btn-secondary" style={{ color: '#ef4444', borderColor: '#ef4444' }}>Reject</button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={async () => {
+                              await axios.put(`${baseURL}/api/clubs/requests/${req.id}/forward`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+                              notify('Forwarded to Admin!');
+                              fetchClubJoinRequests();
+                            }} className="btn-primary" style={{ background: '#3b82f6' }}>Forward to Admin</button>
+                            <button onClick={async () => {
+                              await axios.post(`${baseURL}/api/clubs/requests/${req.id}/reject`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+                              notify('Request rejected!');
+                              fetchClubJoinRequests();
+                            }} className="btn-secondary" style={{ color: '#ef4444', borderColor: '#ef4444' }}>Reject</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
       {/* Feedback Viewing Modal */}
       {viewFeedbackEventId && (
         <div style={{ 
@@ -1549,7 +1641,7 @@ const AdminDashboard = () => {
                         AI Tag: {fb.sentiment}
                       </span>
                     </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>"{fb.comment}"</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: 0 }}>&quot;{fb.comment}&quot;</p>
                   </div>
                 ))}
               </div>

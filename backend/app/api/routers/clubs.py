@@ -62,7 +62,8 @@ def list_clubs(db: Session = Depends(get_db)):
 
 @router.put("/{club_id}/role-permissions")
 def update_club_role_permissions(club_id: int, permissions: dict = Body(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
+    role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if role_str != "admin":
         raise HTTPException(status_code=403, detail="Only admins can configure club role permissions")
     club = db.query(Club).filter(Club.id == club_id).first()
     if not club:
@@ -82,7 +83,8 @@ def update_club_role_permissions(club_id: int, permissions: dict = Body(...), cu
 
 @router.get("/users/{user_id}/access-summary")
 def get_user_access_summary(user_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.admin:
+    role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if role_str != "admin":
         raise HTTPException(status_code=403, detail="Only admins can view another user's access summary")
     target_user = db.query(User).filter(User.id == user_id).first()
     if not target_user:
@@ -219,12 +221,26 @@ def join_club(club_id: int, req: ClubJoinRequestCreate, current_user: User = Dep
 
     # Check permissions dynamically instead of relying on hardcoded logic
     from app.models.user import SystemRole
-    role_record = db.query(SystemRole).filter(SystemRole.name == current_user.role).first()
+    
+    role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    
+    role_record = db.query(SystemRole).filter(SystemRole.name == role_str).first()
     perms = role_record.permissions if role_record and role_record.permissions else {}
     student_portal = perms.get("student_portal", {})
     
     can_direct = student_portal.get("join_clubs_direct") is True
-    can_via = student_portal.get("join_clubs_via_coordinator") is True
+    
+    can_via = student_portal.get("join_clubs_via_coordinator")
+    if role_str == "student":
+        can_via = True
+    elif can_via is None:
+        can_via = False
+    else:
+        can_via = can_via is True
+        
+    # Faculty bypass the department coordinator and go straight to Admin
+    if role_str == "faculty":
+        can_direct = True
     
     if not can_direct and not can_via:
         raise HTTPException(status_code=403, detail="Not authorized to join clubs")
@@ -312,13 +328,78 @@ def list_join_requests(club_id: int, current_user: User = Depends(get_current_us
         ))
     return result
 
+
+@router.get("/department-requests", response_model=List[ClubJoinRequestResponse])
+def get_department_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Coordinator views requests for their department
+    role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if role_str not in ["coordinator", "faculty", "admin"] and not role_str.includes("coordinator"):
+        raise HTTPException(status_code=403, detail="Not authorized to view department requests")
+    
+    if not current_user.department:
+        return []
+        
+    requests = db.query(ClubJoinRequest).join(User, ClubJoinRequest.user_id == User.id).filter(
+        ClubJoinRequest.status == JoinRequestStatus.pending,
+        User.department == current_user.department
+    ).all()
+    
+    result = []
+    for req in requests:
+        user = db.query(User).filter(User.id == req.user_id).first()
+        club = db.query(Club).filter(Club.id == req.club_id).first()
+        result.append(ClubJoinRequestResponse(
+            id=req.id,
+            user_id=req.user_id,
+            club_id=req.club_id,
+            club_name=club.name if club else "Unknown Club",
+            status=req.status,
+            message=req.message,
+            created_at=req.created_at,
+            user_name=user.name if user else "Unknown",
+            user_email=user.email if user else "Unknown",
+            user_department=user.department if user else None
+        ))
+    return result
+
+@router.get("/admin-requests", response_model=List[ClubJoinRequestResponse])
+def get_admin_requests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=403, detail="Not authorized to view admin requests")
+        
+    requests = db.query(ClubJoinRequest).filter(
+        ClubJoinRequest.status == JoinRequestStatus.pending_admin
+    ).all()
+    
+    result = []
+    for req in requests:
+        user = db.query(User).filter(User.id == req.user_id).first()
+        club = db.query(Club).filter(Club.id == req.club_id).first()
+        result.append(ClubJoinRequestResponse(
+            id=req.id,
+            user_id=req.user_id,
+            club_id=req.club_id,
+            club_name=club.name if club else "Unknown Club",
+            status=req.status,
+            message=req.message,
+            created_at=req.created_at,
+            user_name=user.name if user else "Unknown",
+            user_email=user.email if user else "Unknown",
+            user_department=user.department if user else None
+        ))
+    return result
+
 @router.put("/requests/{request_id}/forward")
 def forward_request(request_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     req = db.query(ClubJoinRequest).filter(ClubJoinRequest.id == request_id).first()
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if not is_club_manager(current_user, db, req.club_id, "manage_requests"):
+    req_user = db.query(User).filter(User.id == req.user_id).first()
+    role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    is_dept_coordinator = (role_str in ["coordinator", "faculty", "admin"] or "coordinator" in role_str) and req_user and current_user.department == req_user.department
+
+    if not is_dept_coordinator and not is_club_manager(current_user, db, req.club_id, "manage_requests"):
         raise HTTPException(status_code=403, detail="Not authorized")
 
     req.status = JoinRequestStatus.pending_admin
@@ -358,7 +439,11 @@ def reject_request(request_id: int, current_user: User = Depends(get_current_use
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
-    if not is_club_manager(current_user, db, req.club_id, "manage_requests"):
+    req_user = db.query(User).filter(User.id == req.user_id).first()
+    role_str = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    is_dept_coordinator = (role_str in ["coordinator", "faculty", "admin"] or "coordinator" in role_str) and req_user and current_user.department == req_user.department
+
+    if not is_dept_coordinator and not is_club_manager(current_user, db, req.club_id, "manage_requests"):
         raise HTTPException(status_code=403, detail="Not authorized to reject requests")
 
     req.status = JoinRequestStatus.rejected

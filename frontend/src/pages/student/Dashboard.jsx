@@ -4,6 +4,8 @@ import { AuthContext } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Brain, UserCircle, CalendarDays, MapPin, Users, Search, Building2, Sparkles, Award, LogOut } from 'lucide-react';
 import PortalBrand from '../../components/PortalBrand';
+import { AlertModal } from '../../components/Modals';
+import { DialogFrame, MetricCard, StatusBadge } from '../../components/UI';
 
 const Dashboard = () => {
   const [events, setEvents] = useState([]);
@@ -17,18 +19,19 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterClub, setFilterClub] = useState('');
   const [eventCategory, setEventCategory] = useState('all');
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const baseURL = '';
 
   const isStudentRole = user.role === 'student' || user.permissions?.dashboard_type === 'student';
   const perms = user.permissions?.permissions?.student_portal || {};
-  const canViewEvents = perms.view_events === true;
-  const canRegisterEvents = perms.register_events === true;
-  const canViewRecommendations = perms.view_recommendations === true;
-  const canViewCertificates = perms.view_certificates === true;
-  const canSubmitFeedback = perms.submit_feedback === true;
-  const canViewClubs = perms.view_clubs === true;
+  const canViewEvents = perms.view_events ?? isStudentRole;
+  const canRegisterEvents = perms.register_events ?? isStudentRole;
+  const canViewRecommendations = perms.view_recommendations ?? isStudentRole;
+  const canViewCertificates = perms.view_certificates ?? isStudentRole;
+  const canSubmitFeedback = perms.submit_feedback ?? isStudentRole;
+  const canViewClubs = perms.view_clubs ?? isStudentRole;
 
   const fetchData = async () => {
     try {
@@ -84,7 +87,7 @@ const Dashboard = () => {
       await axios.post(`${baseURL}/api/events/${eventId}/register`);
       await fetchData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to register'}`);
+      setAlertModal({ isOpen: true, title: 'Registration failed', message: err.response?.data?.detail || 'Failed to register for this event.', isError: true });
     }
   };
 
@@ -96,7 +99,7 @@ const Dashboard = () => {
       const imageUrl = URL.createObjectURL(response.data);
       setQrModal({ isOpen: true, imageUrl, regId: registrationId });
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to load QR code'}`);
+      setAlertModal({ isOpen: true, title: 'Ticket unavailable', message: err.response?.data?.detail || 'Failed to load the event ticket.', isError: true });
     }
   };
 
@@ -123,10 +126,10 @@ const Dashboard = () => {
         rating: feedbackModal.rating,
         comment: feedbackModal.comment
       });
-      alert(`Success! AI Sentiment Detected: ${response.data.sentiment}`);
+      setAlertModal({ isOpen: true, title: 'Feedback submitted', message: `Thank you. Your feedback was recorded as ${response.data.sentiment}.`, isError: false });
       setFeedbackModal({ isOpen: false, eventId: null, rating: 5, comment: '' });
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to submit feedback'}`);
+      setAlertModal({ isOpen: true, title: 'Could not submit feedback', message: err.response?.data?.detail || 'Failed to submit feedback.', isError: true });
     }
   };
 
@@ -144,13 +147,14 @@ const Dashboard = () => {
       link.click();
       link.parentNode.removeChild(link);
     } catch (err) {
-      alert("Failed to download certificate. Please try again.");
+      setAlertModal({ isOpen: true, title: 'Download failed', message: 'Failed to download the certificate. Please try again.', isError: true });
       console.error(err);
     }
   };
 
   return (
     <div className="student-dashboard-shell dashboard-theme">
+      <AlertModal {...alertModal} onClose={() => setAlertModal((previous) => ({ ...previous, isOpen: false }))} />
       <aside className="student-dashboard-sidebar">
         <PortalBrand portal="Student Portal" />
         <nav className="student-dashboard-nav" aria-label="Student dashboard">
@@ -161,7 +165,7 @@ const Dashboard = () => {
           {canViewClubs && <button onClick={() => navigate('/clubs')}><Building2 size={18} /> Clubs directory</button>}
           <span className="student-nav-label student-account-label">ACCOUNT</span>
           <button onClick={() => navigate('/profile')}><UserCircle size={18} /> My profile</button>
-          {user.is_club_admin && <button onClick={() => navigate('/admin')}><Building2 size={18} /> Coordinator portal</button>}
+          {(user.is_club_admin || user.permissions?.dashboard_type === 'admin' || ['admin', 'coordinator', 'finance'].includes(user.role)) && <button onClick={() => navigate('/admin')}><Building2 size={18} /> Coordinator portal</button>}
           <button onClick={() => { logout(); navigate('/login'); }}><LogOut size={18} /> Sign out</button>
         </nav>
         <div className="student-sidebar-user"><span className="student-avatar">{(user.name || 'U').charAt(0).toUpperCase()}</span><div><strong>{user.name}</strong><small>{user.role}</small></div></div>
@@ -190,6 +194,11 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <div className="animate-fade-in" style={{ animationDelay: '0.2s' }}>
+        {isStudentRole && <div className="ui-metrics-grid student-overview-metrics">
+          {canViewEvents && <MetricCard icon={CalendarDays} label="Events to explore" value={events.length} detail="Available in your portal" tone="blue" />}
+          <MetricCard icon={Users} label="My registrations" value={Object.keys(myRegistrations).length} detail="Event sign-ups" tone="purple" />
+          {canViewCertificates && <MetricCard icon={Award} label="My certificates" value={Object.keys(myCertificates).length} detail="Ready to view or download" tone="green" />}
+        </div>}
         
         {/* Recommendations Section */}
         {isStudentRole && canViewRecommendations && recommendations.length > 0 && (
@@ -236,12 +245,12 @@ const Dashboard = () => {
             </select>
           </div>
 
-          <div role="tablist" aria-label="Event categories" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', paddingBottom: '1.25rem' }}>
+          <div className="student-category-filter" aria-label="Event categories">
             {categoryOptions.map(option => {
               const count = option.id === 'all' ? events.length : events.filter(event => event.event_category === option.id).length;
               const selected = eventCategory === option.id;
               return (
-                <button key={option.id} role="tab" aria-selected={selected} onClick={() => setEventCategory(option.id)} style={{ border: selected ? '1px solid #1d4ed8' : '1px solid #dbe2ea', borderRadius: '999px', background: selected ? '#eff6ff' : 'white', color: selected ? '#1d4ed8' : '#475569', padding: '0.55rem 0.9rem', fontWeight: 650, cursor: 'pointer' }}>
+                <button key={option.id} type="button" aria-pressed={selected} onClick={() => setEventCategory(option.id)} style={{ border: selected ? '1px solid #1d4ed8' : '1px solid #dbe2ea', borderRadius: '999px', background: selected ? '#eff6ff' : 'white', color: selected ? '#1d4ed8' : '#475569', padding: '0.55rem 0.9rem', fontWeight: 650, cursor: 'pointer' }}>
                   {option.label} <span style={{ opacity: 0.72, marginLeft: '0.25rem' }}>{count}</span>
                 </button>
               );
@@ -251,7 +260,7 @@ const Dashboard = () => {
           {loading ? (
             <div style={{ padding: '3rem 1rem', textAlign: 'center', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px' }}>Loading events…</div>
           ) : visibleEvents.length === 0 ? (
-            <div style={{ padding: '3rem 1rem', textAlign: 'center', color: '#64748b', background: 'white', border: '1px dashed #cbd5e1', borderRadius: '14px' }}>
+            <div className="student-empty-events" style={{ padding: '3rem 1rem', textAlign: 'center', color: '#64748b', background: 'white', border: '1px dashed #cbd5e1', borderRadius: '14px' }}>
               <h3 style={{ color: '#0f172a', margin: '0 0 0.4rem' }}>No events found</h3>
               <p style={{ margin: 0 }}>Try another category or change your search.</p>
             </div>
@@ -260,10 +269,10 @@ const Dashboard = () => {
               {visibleEvents.map(event => {
                 const eventCategoryLabel = categoryOptions.find(option => option.id === event.event_category)?.label || 'Campus event';
                 return (
-                  <article key={event.id} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.25rem', display: 'flex', flexDirection: 'column', minHeight: '290px', boxShadow: '0 5px 18px rgba(15,23,42,0.04)' }}>
+                  <article key={event.id} className="student-event-card" style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.25rem', display: 'flex', flexDirection: 'column', minHeight: '290px', boxShadow: '0 5px 18px rgba(15,23,42,0.04)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.6rem', marginBottom: '0.9rem' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', borderRadius: '999px', background: '#eff6ff', color: '#1d4ed8', padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 700 }}><Building2 size={14} />{eventCategoryLabel}</span>
-                      {event.state === 'completed' && <span style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 700 }}>Completed</span>}
+                      {event.state === 'completed' && <StatusBadge status="Completed" />}
                     </div>
                     <h3 style={{ fontSize: '1.15rem', lineHeight: 1.35, margin: '0 0 0.45rem', color: '#0f172a' }}>{event.title}</h3>
                     <p style={{ fontSize: '0.9rem', lineHeight: 1.6, color: '#64748b', margin: '0 0 1rem', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{event.description}</p>
@@ -324,14 +333,8 @@ const Dashboard = () => {
 
       {/* QR Code Modal */}
       {qrModal.isOpen && (
-        <div style={{ 
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
-          backgroundColor: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 
-        }}>
-          <div className="glass-card animate-fade-in" style={{ padding: '3rem', textAlign: 'center', background: 'rgba(255,255,255,0.95)' }}>
-            <h3 style={{ marginBottom: '0.5rem', fontSize: '1.5rem' }}>Your Secure Ticket</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>Scan this code at the venue entrance</p>
+        <DialogFrame title="Your secure ticket" onClose={() => setQrModal({ isOpen: false, imageUrl: null })} className="ticket-dialog">
+            <p className="ui-dialog-description">Scan this code at the venue entrance</p>
             
             <div style={{ padding: '1rem', background: 'white', borderRadius: '12px', display: 'inline-block', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
               <img src={qrModal.imageUrl} alt="QR Code" style={{ width: '220px', height: '220px', display: 'block' }} />
@@ -342,23 +345,17 @@ const Dashboard = () => {
                 Close Ticket
               </button>
             </div>
-          </div>
-        </div>
+        </DialogFrame>
       )}
 
       {/* Feedback Modal */}
       {feedbackModal.isOpen && (
-        <div style={{ 
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', 
-          backgroundColor: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)',
-          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 
-        }}>
-          <div className="glass-card animate-fade-in" style={{ padding: '2rem', width: '100%', maxWidth: '400px', background: 'rgba(255,255,255,0.95)' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1.5rem', color: 'var(--primary)' }}>Event Feedback</h3>
+        <DialogFrame title="Event feedback" onClose={() => setFeedbackModal({ isOpen: false, eventId: null, rating: 5, comment: '' })} className="feedback-dialog" initialFocus="input">
             <form onSubmit={submitFeedback} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <label>Rating (1-5)</label>
+                <label htmlFor="feedback-rating">Rating (1-5)</label>
                 <input 
+                  id="feedback-rating"
                   type="number" min="1" max="5" 
                   value={feedbackModal.rating} 
                   onChange={e => setFeedbackModal({...feedbackModal, rating: parseInt(e.target.value)})}
@@ -366,8 +363,9 @@ const Dashboard = () => {
                 />
               </div>
               <div>
-                <label>Comments</label>
+                <label htmlFor="feedback-comment">Comments</label>
                 <textarea 
+                  id="feedback-comment"
                   value={feedbackModal.comment} 
                   onChange={e => setFeedbackModal({...feedbackModal, comment: e.target.value})}
                   className="input-glass"
@@ -381,8 +379,7 @@ const Dashboard = () => {
                 <button type="button" onClick={() => setFeedbackModal({ isOpen: false, eventId: null, rating: 5, comment: '' })} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
               </div>
             </form>
-          </div>
-        </div>
+        </DialogFrame>
       )}
       </main>
     </div>

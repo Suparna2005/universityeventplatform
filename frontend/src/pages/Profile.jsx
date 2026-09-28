@@ -3,6 +3,7 @@ import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import ChangePasswordModal from './ChangePasswordModal';
+import PortalBrand from '../components/PortalBrand';
 
 const Profile = () => {
   const { user, setUser } = useContext(AuthContext);
@@ -75,17 +76,22 @@ const Profile = () => {
   };
 
   if (!user) return <div>Loading...</div>;
+  const dashboardPath = ['student', 'faculty', 'mentor'].includes(user.role) || user.permissions?.dashboard_type === 'student' ? '/dashboard' : '/admin';
 
   return (
     <div className="dashboard-theme profile-page" style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
-      <button onClick={() => navigate(user.role === 'student' ? '/dashboard' : '/admin')} className="btn-secondary" style={{ marginBottom: '2rem' }}>
-        &larr; Back to Dashboard
-      </button>
+      <header className="standalone-topbar">
+        <PortalBrand portal="University Portal" />
+        <div className="standalone-topbar-actions">
+          <span>Welcome, {user.name}</span>
+          <button onClick={() => navigate(dashboardPath)} className="btn-secondary">Main dashboard</button>
+        </div>
+      </header>
 
       <div className="glass-card animate-fade-in" style={{ padding: '3rem' }}>
-        <h2 style={{ fontSize: '2rem', marginBottom: '2rem', color: 'var(--primary)' }}>My Profile</h2>
+        <div className="profile-section-heading"><div><span className="ui-eyebrow">ACCOUNT SETTINGS</span><h1>My profile</h1><p>Manage your personal information and account security.</p></div></div>
         
-        {message && <div className="badge badge-warning" style={{ display: 'block', marginBottom: '1rem', padding: '1rem' }}>{message}</div>}
+        {message && <div className={`profile-notice${message.startsWith('Error:') ? ' profile-notice-error' : ' profile-notice-success'}`} role={message.startsWith('Error:') ? 'alert' : 'status'}>{message}</div>}
 
         <div style={{ display: 'flex', gap: '3rem', alignItems: 'flex-start' }}>
           {/* Picture Upload */}
@@ -104,7 +110,7 @@ const Profile = () => {
             </div>
             <label className="btn-secondary" style={{ cursor: 'pointer', display: 'inline-block' }}>
               Change Picture
-              <input type="file" style={{ display: 'none' }} accept="image/*" onChange={handleFileChange} disabled={loading} />
+              <input className="sr-only" type="file" accept="image/*" onChange={handleFileChange} disabled={loading} aria-label="Upload a profile picture" />
             </label>
           </div>
 

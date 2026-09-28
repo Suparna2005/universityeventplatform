@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Check } from 'lucide-react';
 
 const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
@@ -24,9 +25,9 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
         system_setup: { manage_departments: false, manage_roles: false },
         student_portal: { view_events: false, register_events: false, view_recommendations: false, view_certificates: false, submit_feedback: false, view_clubs: false, join_clubs_direct: false, join_clubs_via_coordinator: false }
       };
-      
+
       const rolePerms = (role && role.permissions) || {};
-      
+
       // Merge with defaults to ensure all keys exist
       const mergedPerms = { ...defaultPerms };
       if (rolePerms.permissions) {
@@ -67,8 +68,8 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
     if (searchQuery && !label.toLowerCase().includes(searchQuery.toLowerCase())) return null;
     return (
       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: '0.5rem' }}>
-        <input 
-          type="checkbox" 
+        <input
+          type="checkbox"
           checked={permissions[category][field]}
           onChange={() => handleCheckboxChange(category, field)}
           style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
@@ -80,32 +81,26 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
   };
 
   return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(15, 23, 42, 0.7)',
-      backdropFilter: 'blur(4px)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center',
-      zIndex: 9999
-    }}>
-      <div className="glass-card animate-fade-in" style={{ 
-        width: '100%', maxWidth: '700px', background: 'rgba(255,255,255,0.98)', 
+    createPortal(<div className="role-permissions-modal-backdrop">
+      <div className="glass-card animate-fade-in role-permissions-modal-card" role="dialog" aria-modal="true" aria-labelledby="role-permissions-title" style={{
+        width: '100%', maxWidth: '700px', background: 'rgba(255,255,255,0.98)',
         maxHeight: '90vh', display: 'flex', flexDirection: 'column',
         overflow: 'hidden'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1.5rem 2rem', borderBottom: '1px solid var(--glass-border)' }}>
-          <h2 style={{ margin: 0, color: 'var(--primary)' }}>{role ? 'Edit System Role' : 'Create Custom Role'}</h2>
+          <h2 id="role-permissions-title" style={{ margin: 0, color: 'var(--primary)' }}>{role ? 'Edit System Role' : 'Create Custom Role'}</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
             <X size={24} />
           </button>
         </div>
 
-        <form onSubmit={handleSave} style={{ overflowY: 'auto', flex: 1, padding: '2rem' }}>
+        <form onSubmit={handleSave} style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '2rem' }}>
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Role Name</label>
-            <input 
-              type="text" 
-              className="input-glass" 
-              value={name} 
+            <input
+              type="text"
+              className="input-glass"
+              value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. Event Coordinator"
               required
@@ -115,10 +110,10 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
 
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>Search Permissions</label>
-            <input 
-              type="text" 
-              className="input-glass" 
-              value={searchQuery} 
+            <input
+              type="text"
+              className="input-glass"
+              value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search features..."
               style={{ width: '100%' }}
@@ -127,12 +122,12 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
 
           {role?.name === 'admin' && (
             <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '6px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-              The base 'admin' role is read-only to prevent locking administrators out of the system.
+              The base &apos;admin&apos; role is read-only to prevent locking administrators out of the system.
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', animation: 'fadeIn 0.3s' }}>
-            
+          <div className="role-permissions-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', animation: 'fadeIn 0.3s' }}>
+
             {/* Backend Permissions */}
             <div>
               <h4 style={{ margin: '0 0 1rem 0', color: 'var(--primary)', borderBottom: '2px solid var(--glass-border)', paddingBottom: '0.5rem' }}>Backend Management</h4>
@@ -141,24 +136,24 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
               {renderCheckbox('users', 'delete_users', 'Delete Users')}
               {renderCheckbox('users', 'assign_coordinators', 'Assign Coordinators')}
               {renderCheckbox('users', 'manage_club_requests', 'Manage Club Requests')}
-              
+
               <h4 style={{ margin: '1.5rem 0 1rem 0', color: 'var(--primary)' }}>System Setup</h4>
               {renderCheckbox('system_setup', 'manage_departments', 'Manage Departments')}
               {renderCheckbox('system_setup', 'manage_roles', 'Manage Roles')}
-              
+
               <h4 style={{ margin: '1.5rem 0 1rem 0', color: 'var(--primary)' }}>Finance Management</h4>
               {renderCheckbox('finance', 'view_expenses', 'View Expenses')}
               {renderCheckbox('finance', 'verify_expenses', 'Verify Expenses')}
             </div>
-            
+
             {/* Frontend / Public Permissions */}
             <div>
               <h4 style={{ margin: '0 0 1rem 0', color: 'var(--primary)', borderBottom: '2px solid var(--glass-border)', paddingBottom: '0.5rem' }}>Event & Club Actions</h4>
-              
+
               {renderCheckbox('events', 'view_events', 'View All Events')}
               {renderCheckbox('events', 'approve_events', 'Approve / Reject Events')}
               {renderCheckbox('events', 'delete_events', 'Delete Events')}
-              
+
               {renderCheckbox('clubs', 'view_clubs', 'View Clubs')}
               {renderCheckbox('clubs', 'manage_gallery', 'Manage Gallery')}
               {renderCheckbox('clubs', 'delete_clubs', 'Delete Clubs')}
@@ -180,7 +175,7 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
               {renderCheckbox('student_portal', 'join_clubs_via_coordinator', 'Request to Join Clubs (Via Dept Coordinator)')}
               {renderCheckbox('student_portal', 'submit_feedback', 'Submit AI Feedback')}
             </div>
-            
+
           </div>
         </form>
 
@@ -191,7 +186,7 @@ const RolePermissionsModal = ({ isOpen, role, onClose, onSave }) => {
           </button>
         </div>
       </div>
-    </div>
+    </div>, document.body)
   );
 };
 

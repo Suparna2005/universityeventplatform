@@ -78,7 +78,7 @@ const AdminClubApprovals = () => {
               <div>
                 <strong style={{ fontSize: '1.1rem' }}>{req.user_name}</strong> <span style={{ color: 'var(--text-muted)' }}>({req.user_email})</span>
                 <div style={{ marginTop: '0.25rem', color: '#0369a1', fontWeight: 600 }}>Requesting to join: {req.club_name}</div>
-                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.95rem', color: '#4b5563', fontStyle: 'italic' }}>"{req.message}"</p>
+                <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.95rem', color: '#4b5563', fontStyle: 'italic' }}>&quot;{req.message}&quot;</p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <button onClick={() => handleApprove(req.id)} className="btn-primary" style={{ padding: '0.5rem 1rem' }}>Accept & Generate</button>

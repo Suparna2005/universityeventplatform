@@ -53,11 +53,13 @@ class ClubJoinRequestResponse(BaseModel):
     id: int
     user_id: int
     club_id: int
+    club_name: Optional[str] = None
     status: JoinRequestStatus
     message: Optional[str]
     created_at: datetime
     user_name: str
     user_email: str
+    user_department: Optional[str] = None
 
     class Config:
         from_attributes = True

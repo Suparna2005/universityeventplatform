@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { UserPlus, Users, Search } from 'lucide-react';
-import { ConfirmModal } from '../../components/Modals';
+import { AlertModal, ConfirmModal } from '../../components/Modals';
 
 const StudentManagement = () => {
   const [formData, setFormData] = useState({
@@ -16,6 +16,11 @@ const StudentManagement = () => {
   const [editingUserId, setEditingUserId] = useState(null);
   const baseURL = '';
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null, onCancel: () => setConfirmModal({ isOpen: false }) });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
+  const notify = (message) => {
+    const isError = /error|failed|could not|unable/i.test(String(message));
+    setAlertModal({ isOpen: true, title: isError ? 'Action could not be completed' : 'Update complete', message: String(message), isError });
+  };
 
   const [pendingRequests, setPendingRequests] = useState([]);
   const [pendingLeaveRequests, setPendingLeaveRequests] = useState([]);
@@ -52,10 +57,10 @@ const StudentManagement = () => {
       const res = await axios.post(`${baseURL}/api/coordinator/${endpoint}/${id}/forward`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert(res.data.message || 'Forwarded successfully.');
+      notify(res.data.message || 'Forwarded successfully.');
       fetchStudents();
     } catch (err) {
-      alert(err.response?.data?.detail || 'Error forwarding request');
+      notify(err.response?.data?.detail || 'Error forwarding request');
     }
   };
 
@@ -65,11 +70,26 @@ const StudentManagement = () => {
       await axios.post(`${baseURL}/api/coordinator/${endpoint}/${id}/reject`, {}, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      alert('Request rejected.');
+      notify('Request rejected.');
       fetchStudents();
     } catch (err) {
-      alert('Error rejecting request');
+      notify('Error rejecting request');
     }
+  };
+
+  const confirmRejectRequest = (id, type = 'join') => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reject this request?',
+      message: 'The student will not be added to the club. This action will be recorded in the request workflow.',
+      confirmText: 'Reject request',
+      confirmColor: '#b93846',
+      onCancel: () => setConfirmModal((previous) => ({ ...previous, isOpen: false })),
+      onConfirm: () => {
+        setConfirmModal((previous) => ({ ...previous, isOpen: false }));
+        handleRejectRequest(id, type);
+      }
+    });
   };
 
   const handleBulkUpload = async (e) => {
@@ -148,7 +168,7 @@ const StudentManagement = () => {
           });
           fetchStudents();
         } catch (err) {
-          alert(`Error deleting student: ${err.response?.data?.detail || err.message}`);
+          notify(`Error deleting student: ${err.response?.data?.detail || err.message}`);
         }
       }
     });
@@ -162,6 +182,7 @@ const StudentManagement = () => {
   return (
     <div className="student-management-layout" style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '2rem' }}>
       <ConfirmModal {...confirmModal} />
+      <AlertModal {...alertModal} onClose={() => setAlertModal((previous) => ({ ...previous, isOpen: false }))} />
       {/* LEFT: Generation Form */}
       <div className="glass-card" style={{ padding: '2rem', height: 'fit-content', position: 'sticky', top: '100px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
@@ -243,7 +264,7 @@ const StudentManagement = () => {
                       <td style={{ padding: '0.5rem', color: 'gray' }}>{r.message}</td>
                       <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                         <button onClick={() => handleForwardRequest(r.id)} style={{ padding: '0.4rem 0.8rem', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Forward to Admin</button>
-                        <button onClick={() => handleRejectRequest(r.id)} style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
+                        <button onClick={() => confirmRejectRequest(r.id)} style={{ padding: '0.4rem 0.8rem', background: '#fff0f1', color: '#a93240', border: '1px solid #ecc6cb', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
                       </td>
                     </tr>
                   ))}
@@ -274,7 +295,7 @@ const StudentManagement = () => {
                       <td style={{ padding: '0.5rem', color: 'gray' }}>{r.message}</td>
                       <td style={{ padding: '0.5rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                         <button onClick={() => handleForwardRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#dcfce7', color: '#166534', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Forward to Admin</button>
-                        <button onClick={() => handleRejectRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#fee2e2', color: '#991b1b', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
+                        <button onClick={() => confirmRejectRequest(r.id, 'leave')} style={{ padding: '0.4rem 0.8rem', background: '#fff0f1', color: '#a93240', border: '1px solid #ecc6cb', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}>Reject</button>
                       </td>
                     </tr>
                   ))}

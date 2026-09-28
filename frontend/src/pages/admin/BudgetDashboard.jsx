@@ -1,61 +1,63 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useCallback, useContext, useEffect, useState } from 'react';
 import axios from 'axios';
+import { BadgeIndianRupee, Download, FileSpreadsheet, Wallet } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
+import { AlertModal, ConfirmModal } from '../../components/Modals';
+import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '../../components/UI';
 
 const BudgetDashboard = () => {
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [events, setEvents] = useState([]);
   const [proposal, setProposal] = useState({ event_id: '', proposed_amount: '' });
   const [downloadError, setDownloadError] = useState('');
-  
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const { user } = useContext(AuthContext);
   const baseURL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setLoadError('');
     try {
       const [budgetsRes, eventsRes] = await Promise.all([
         axios.get(`${baseURL}/api/finance/budgets`),
-        axios.get(`${baseURL}/api/admin/events`) // Assuming this returns events for the coordinator/admin
+        axios.get(`${baseURL}/api/admin/events`)
       ]);
       setBudgets(budgetsRes.data);
       setEvents(eventsRes.data);
     } catch (err) {
-      console.error(err);
+      setLoadError(err.response?.data?.detail || 'Budget data could not be loaded. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, [baseURL]);
 
-  const handlePropose = async (e) => {
-    e.preventDefault();
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handlePropose = async (event) => {
+    event.preventDefault();
     try {
       await axios.post(`${baseURL}/api/finance/budgets`, {
-        event_id: parseInt(proposal.event_id),
+        event_id: parseInt(proposal.event_id, 10),
         proposed_amount: parseFloat(proposal.proposed_amount)
       });
-      alert('Budget proposed successfully!');
+      setAlertModal({ isOpen: true, title: 'Budget proposal submitted', message: 'The event budget was sent for review.', isError: false });
       setProposal({ event_id: '', proposed_amount: '' });
       fetchData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to propose budget'}`);
+      setAlertModal({ isOpen: true, title: 'Could not submit proposal', message: err.response?.data?.detail || 'Failed to propose budget.', isError: true });
     }
   };
 
   const handleStatusChange = async (budgetId, status, amount) => {
     try {
-      await axios.put(`${baseURL}/api/finance/budgets/${budgetId}/status`, {
-        status: status,
-        approved_amount: amount
-      });
-      alert(`Budget marked as ${status}`);
+      await axios.put(`${baseURL}/api/finance/budgets/${budgetId}/status`, { status, approved_amount: amount });
+      setAlertModal({ isOpen: true, title: 'Budget updated', message: `The proposal was marked as ${status}.`, isError: false });
       fetchData();
     } catch (err) {
-      alert(`Error: ${err.response?.data?.detail || 'Failed to update status'}`);
+      setAlertModal({ isOpen: true, title: 'Could not update budget', message: err.response?.data?.detail || 'Failed to update status.', isError: true });
     }
   };
 
@@ -79,79 +81,74 @@ const BudgetDashboard = () => {
     }
   };
 
-  if (loading) return <div>Loading budgets...</div>;
+  if (loading) return <LoadingState label="Loading budget proposals…" />;
+  if (loadError) return <ErrorState title="Budget data unavailable" description={loadError} action={<button type="button" className="btn-secondary" onClick={fetchData}>Try again</button>} />;
 
   return (
-    <div className="animate-fade-in">
-      <div className="budget-dashboard-heading">
-        <div>
-          <h2 style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>Financial Budgeting</h2>
-          <p style={{ color: 'var(--text-muted)' }}>Review event budget proposals and expense reports.</p>
-        </div>
-        {['coordinator', 'finance', 'admin'].includes(user.role) && (
-          <div className="budget-csv-actions">
-            <button onClick={() => downloadBudgetCsv('/api/finance/budgets/export', 'event_budgets.csv')} className="btn-primary">
-              Download Budget CSV
-            </button>
-            <button onClick={() => downloadBudgetCsv('/api/finance/budgets/csv/template', 'event_budgets_template.csv')} className="btn-secondary">
-              Download CSV Format
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="animate-fade-in budget-workspace">
+      <ConfirmModal {...confirmModal} onCancel={() => setConfirmModal((previous) => ({ ...previous, isOpen: false }))} />
+      <AlertModal {...alertModal} onClose={() => setAlertModal((previous) => ({ ...previous, isOpen: false }))} />
+      <PageHeader
+        eyebrow="Finance and event operations"
+        title="Financial budgeting"
+        description="Review event budget proposals and expense reports."
+        icon={Wallet}
+        actions={['coordinator', 'finance', 'admin'].includes(user.role) && <>
+          <button onClick={() => downloadBudgetCsv('/api/finance/budgets/export', 'event_budgets.csv')} className="btn-primary"><Download size={16} /> Download budget CSV</button>
+          <button onClick={() => downloadBudgetCsv('/api/finance/budgets/csv/template', 'event_budgets_template.csv')} className="btn-secondary"><FileSpreadsheet size={16} /> CSV format</button>
+        </>}
+      />
       <p className="budget-csv-format"><strong>CSV format:</strong> Event ID, Event Title, Event Date, Hosting Club, Department, Proposed Budget (INR), Approved Budget (INR), Actual Expenses (INR), Budget Status, Event Status, Submitted By.</p>
-      {downloadError && <p role="alert" style={{ marginBottom: '1rem', color: '#991b1b' }}>{downloadError}</p>}
+      {downloadError && <ErrorState title="CSV download failed" description={downloadError} />}
 
-      {/* Coordinator Proposal Form */}
       {['coordinator', 'admin'].includes(user.role) && (
-        <div className="glass-card" style={{ padding: '2rem', marginBottom: '2rem' }}>
-          <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Propose New Budget</h3>
-          <form onSubmit={handlePropose} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
-            <div style={{ flex: 2 }}>
-              <label>Select Event</label>
-              <select className="input-glass" required value={proposal.event_id} onChange={e => setProposal({...proposal, event_id: e.target.value})}>
-                <option value="">-- Select Event --</option>
-                {events.map(ev => <option key={ev.id} value={ev.id}>{ev.title}</option>)}
+        <section className="glass-card budget-proposal-card">
+          <div className="budget-proposal-heading"><span className="ui-page-icon"><BadgeIndianRupee size={20} /></span><div><h2>Propose a budget</h2><p>Select an event and submit the amount for finance review.</p></div></div>
+          <form onSubmit={handlePropose} className="budget-proposal-form">
+            <div className="ui-form-field budget-event-field">
+              <label htmlFor="budget-event">Event</label>
+              <select id="budget-event" className="input-glass" required value={proposal.event_id} onChange={(event) => setProposal((previous) => ({ ...previous, event_id: event.target.value }))}>
+                <option value="">Select an event</option>
+                {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
-              <label>Proposed Amount (₹)</label>
-              <input type="number" min="0" className="input-glass" required value={proposal.proposed_amount} onChange={e => setProposal({...proposal, proposed_amount: e.target.value})} />
+            <div className="ui-form-field">
+              <label htmlFor="budget-amount">Proposed amount (₹)</label>
+              <input id="budget-amount" type="number" min="0" className="input-glass" required value={proposal.proposed_amount} onChange={(event) => setProposal((previous) => ({ ...previous, proposed_amount: event.target.value }))} />
             </div>
-            <button type="submit" className="btn-primary" style={{ padding: '0.8rem 1.5rem' }}>Submit Proposal</button>
+            <button type="submit" className="btn-primary">Submit proposal</button>
           </form>
-        </div>
+        </section>
       )}
 
-      {/* Budget List */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
+      <section className="budget-list-section" aria-label="Budget proposals">
+        <div className="budget-list-heading"><h2>Budget proposals</h2><span>{budgets.length} {budgets.length === 1 ? 'proposal' : 'proposals'}</span></div>
         {budgets.length === 0 ? (
-          <p>No budgets found.</p>
+          <EmptyState icon={BadgeIndianRupee} title="No budget proposals yet" description="Submitted event budgets will appear here for review." />
         ) : (
-          budgets.map(budget => {
-            const ev = events.find(e => e.id === budget.event_id);
-            return (
-              <div key={budget.id} className="glass-card" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h4 style={{ margin: '0 0 0.5rem 0' }}>{ev ? ev.title : `Event ID: ${budget.event_id}`}</h4>
-                  <p style={{ margin: 0, color: 'var(--text-muted)' }}>Proposed: ₹{budget.proposed_amount}</p>
-                  <span className={`badge ${budget.status === 'approved' ? 'badge-success' : budget.status === 'rejected' ? 'badge-warning' : 'badge-primary'}`} style={{ marginTop: '0.5rem', display: 'inline-block' }}>
-                    {budget.status.toUpperCase()}
-                  </span>
-                </div>
-
-                {/* Finance Officer Actions */}
-                {['finance', 'admin'].includes(user.role) && budget.status === 'pending' && (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={() => handleStatusChange(budget.id, 'approved', budget.proposed_amount)} className="btn-primary" style={{ background: '#10b981' }}>Approve</button>
-                    <button onClick={() => handleStatusChange(budget.id, 'rejected', 0)} className="btn-secondary" style={{ background: '#fee2e2', color: '#dc2626', borderColor: '#fca5a5' }}>Reject</button>
+          <div className="budget-list">
+            {budgets.map((budget) => {
+              const event = events.find((item) => item.id === budget.event_id);
+              return (
+                <article key={budget.id} className="glass-card budget-proposal-row">
+                  <div className="budget-proposal-details">
+                    <h3>{event ? event.title : `Event ID: ${budget.event_id}`}</h3>
+                    <p>Proposed amount <strong>₹{Number(budget.proposed_amount || 0).toLocaleString('en-IN')}</strong></p>
+                    {event && <small>{event.club_name || 'University event'}{event.date ? ` · ${new Date(event.date).toLocaleDateString()}` : ''}</small>}
+                    <StatusBadge status={budget.status} />
                   </div>
-                )}
-              </div>
-            );
-          })
+                  {['finance', 'admin'].includes(user.role) && budget.status === 'pending' && (
+                    <div className="budget-proposal-actions">
+                      <button onClick={() => handleStatusChange(budget.id, 'approved', budget.proposed_amount)} className="btn-primary">Approve</button>
+                      <button onClick={() => setConfirmModal({ isOpen: true, title: 'Reject budget proposal?', message: 'This will mark the current proposal as rejected.', confirmText: 'Reject proposal', onConfirm: () => { setConfirmModal((previous) => ({ ...previous, isOpen: false })); handleStatusChange(budget.id, 'rejected', 0); } })} className="btn-secondary danger-button">Reject</button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

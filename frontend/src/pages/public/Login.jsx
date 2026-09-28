@@ -1,42 +1,42 @@
-import React, { useState, useContext } from 'react';
-import { AuthContext } from '../../context/AuthContext';
+import React, { useContext, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
+import { ArrowRight, CalendarDays, ShieldCheck, Sparkles } from 'lucide-react';
+import { AuthContext } from '../../context/AuthContext';
 import { AlertModal } from '../../components/Modals';
+import { DialogFrame, FormField } from '../../components/UI';
+import PortalBrand from '../../components/PortalBrand';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
+  const [resetting, setResetting] = useState(false);
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
   const baseURL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000');
 
-  // Modals state
-  const [showForgotModal, setShowForgotModal] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
-  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '', isError: false });
-  
-  const [showRequestModal, setShowRequestModal] = useState(false);
-  const [reqRole, setReqRole] = useState('student');
-  const [reqName, setReqName] = useState('');
-  const [reqEmail, setReqEmail] = useState('');
-  const [reqDept, setReqDept] = useState('');
-  const [reqYear, setReqYear] = useState('');
-  const [reqSection, setReqSection] = useState('');
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+    setSubmitting(true);
     try {
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed');
+      setError(err.response?.data?.detail || 'We could not sign you in. Check your details and try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleForgotPassword = async (e) => {
-    e.preventDefault();
+  const handleForgotPassword = async (event) => {
+    event.preventDefault();
+    setResetting(true);
     try {
       await axios.post(`${baseURL}/api/auth/forgot-password`, { email: forgotEmail });
       setShowForgotModal(false);
@@ -44,97 +44,77 @@ const Login = () => {
       setAlertModal({ isOpen: true, title: 'Password reset requested', message: 'If the email exists, a new temporary password has been sent to it.', isError: false });
     } catch (err) {
       setAlertModal({ isOpen: true, title: 'Could not reset password', message: err.response?.data?.detail || 'Please try again.', isError: true });
+    } finally {
+      setResetting(false);
     }
   };
 
-
-
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: 'url("https://upload.wikimedia.org/wikipedia/commons/8/81/Brainware-university.jpg") center/cover no-repeat',
-      position: 'relative'
-    }}>
-      <AlertModal {...alertModal} onClose={() => setAlertModal(previous => ({ ...previous, isOpen: false }))} />
-      {/* Dark overlay for better readability */}
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 45, 98, 0.7)' }}></div>
-
-      <div className="glass-card animate-fade-in" style={{
-        position: 'relative',
-        width: '100%',
-        maxWidth: '450px',
-        padding: '3rem',
-        background: 'rgba(255, 255, 255, 0.85)',
-        zIndex: 10
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '2rem', color: 'var(--primary)', fontWeight: 800 }}>
-            BRAINWARE
-          </h2>
-          <h3 style={{ fontSize: '1.2rem', color: 'var(--secondary)', letterSpacing: '2px', textTransform: 'uppercase' }}>
-            UNIVERSITY
-          </h3>
-          <p style={{ color: 'var(--text-muted)', marginTop: '1rem', fontStyle: 'italic' }}>Event Management Portal</p>
-        </div>
-
-        {error && (
-          <div style={{ padding: '1rem', background: '#fee2e2', color: '#991b1b', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>University Email</label>
-            <input 
-              type="email" 
-              className="input-glass"
-              placeholder="student001@test.edu"
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <label style={{ display: 'block', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.5rem' }}>Password</label>
-              <button type="button" onClick={() => setShowForgotModal(true)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>Forgot Password?</button>
+    <main className="auth-shell">
+      <section className="auth-story-panel">
+        <div className="auth-story-inner">
+          <PortalBrand portal="University Portal" />
+          <div className="auth-story-copy">
+            <span className="auth-kicker"><Sparkles size={15} /> CAMPUS LIFE, CONNECTED</span>
+            <h1>Make every campus moment count.</h1>
+            <p>Discover events, connect with university clubs, and keep all your campus experiences in one place.</p>
+            <div className="auth-feature-list">
+              <span><CalendarDays size={18} /> Find events that matter to you</span>
+              <span><ShieldCheck size={18} /> One secure university account</span>
             </div>
-            <input 
-              type="password" 
-              className="input-glass"
-              placeholder="••••••••"
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
           </div>
-          <button type="submit" className="btn-primary" style={{ marginTop: '1rem', padding: '12px' }}>
-            Sign In to Dashboard
-          </button>
-        </form>
-      </div>
-
-      {/* Forgot Password Modal */}
-      {showForgotModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 99, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-          <div className="glass-card animate-fade-in" style={{ padding: '2rem', width: '90%', maxWidth: '400px', background: 'white' }}>
-            <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Reset Password</h3>
-            <p style={{ fontSize: '0.9rem', color: 'gray', marginBottom: '1.5rem' }}>Enter your registered email and we will send a new temporary password.</p>
-            <form onSubmit={handleForgotPassword}>
-              <input type="email" placeholder="Your Email" required value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} className="input-glass" style={{ marginBottom: '1rem', width: '100%' }} />
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Send</button>
-                <button type="button" onClick={() => setShowForgotModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
-              </div>
-            </form>
-          </div>
+          <small className="auth-story-footer">Brainware University · Event Management Portal</small>
         </div>
+        <div className="auth-decoration auth-decoration-one" />
+        <div className="auth-decoration auth-decoration-two" />
+      </section>
+
+      <section className="auth-form-panel">
+        <div className="auth-form-card">
+          <div className="auth-mobile-brand"><PortalBrand portal="University Portal" /></div>
+          <span className="ui-eyebrow">WELCOME BACK</span>
+          <h2>Sign in to your account</h2>
+          <p className="auth-intro">Use your university credentials to continue.</p>
+
+          {error && <div className="auth-error" id="login-error" role="alert">{error}</div>}
+
+          <form onSubmit={handleSubmit} className="auth-form">
+            <FormField label="University email" id="login-email">
+              <input id="login-email" className="input-glass" type="email" autoComplete="username" placeholder="name@brainwareuniversity.ac.in" value={email} onChange={(event) => setEmail(event.target.value)} required aria-describedby={error ? 'login-error' : undefined} />
+            </FormField>
+            <div className="ui-form-field">
+              <div className="auth-label-row">
+                <label htmlFor="login-password">Password</label>
+                <button type="button" className="auth-text-button" onClick={() => setShowForgotModal(true)}>Forgot password?</button>
+              </div>
+              <input id="login-password" className="input-glass" type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(event) => setPassword(event.target.value)} required aria-describedby={error ? 'login-error' : undefined} />
+            </div>
+            <button type="submit" className="btn-primary auth-submit" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Sign in'} {!submitting && <ArrowRight size={17} />}
+            </button>
+          </form>
+
+          <p className="auth-switch">New to Brainware? <Link to="/signup">Create a student account</Link></p>
+          <p className="auth-security-note"><ShieldCheck size={15} /> Your account is protected by university authentication.</p>
+        </div>
+      </section>
+
+      {showForgotModal && (
+        <DialogFrame title="Reset your password" onClose={() => setShowForgotModal(false)} className="auth-reset-dialog" initialFocus="input">
+          <p className="ui-dialog-description">Enter your registered email and we’ll send a temporary password if the account exists.</p>
+          <form onSubmit={handleForgotPassword}>
+            <FormField label="University email" id="reset-email">
+              <input id="reset-email" type="email" autoComplete="email" placeholder="name@brainwareuniversity.ac.in" required value={forgotEmail} onChange={(event) => setForgotEmail(event.target.value)} className="input-glass" />
+            </FormField>
+            <div className="ui-dialog-actions">
+              <button type="button" onClick={() => setShowForgotModal(false)} className="btn-secondary">Cancel</button>
+              <button type="submit" className="btn-primary" disabled={resetting}>{resetting ? 'Sending…' : 'Send reset'}</button>
+            </div>
+          </form>
+        </DialogFrame>
       )}
-    </div>
+      <AlertModal {...alertModal} onClose={() => setAlertModal((previous) => ({ ...previous, isOpen: false }))} />
+    </main>
   );
 };
 
